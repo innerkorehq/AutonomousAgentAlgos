@@ -89,11 +89,64 @@ events and a load costs O(new events). A 40-turn run does ~16x fewer state folds
 grows with run length. A snapshot is derived data: a corrupt, stale-versioned, or too-new one is
 ignored and the state is replayed from the log. Bump a projection's `version` if you change its fold.
 
+### Tool execution guard (stalled and crashed workers)
+Bus delivery is at-least-once, and a worker can die or stall (GC pause, VM freeze, network partition)
+while a tool call is running. Three layers protect against a repeated side effect; each is configurable.
+
+| Layer | What it does |
+|---|---|
+| **Durable ack** | The request stays unacknowledged on the bus until the tool finishes, so a worker that dies mid-call has the call redelivered to another. |
+| **Exclusion** | A per-call execution lease with a heartbeat: two workers never run the same call concurrently while the first is alive. |
+| **Fencing** | Every run is a numbered attempt recorded *before* it executes (`aaa.tool.started`, id `<request>:attempt:<n>`). A worker that loses its lease cancels its tool and records nothing; a result from a superseded attempt is rejected (`aaa.tool.stale_result`). |
+| **Effect safety** | The tool receives `ctx.idempotency_key` (stable across attempts and workers), `ctx.attempt` and `ctx.fence` to make the external effect idempotent. |
+
+```python
+from aaa.tools import GuardConfig, ToolContext, ToolHandler, tool
+
+# global default for every tool
+ToolHandler(registry, guard=GuardConfig(lease_ttl_s=30, max_attempts=3)).attach(engine)
+
+
+@tool  # inherits the default: re-run a lost call, up to 3 attempts
+async def search(q: str) -> list: ...
+
+
+@tool(delivery="at_most_once")  # never re-run once an attempt started
+async def send_email(to: str, body: str, ctx: ToolContext) -> str:
+    return await ses.send(to, body, dedupe_key=ctx.idempotency_key)
+
+
+@tool(
+    idempotency_key=lambda a: f"refund:{a['order_id']}",  # business-level key, stable across
+    guard={"max_attempts": 1, "lease_ttl_s": 60},
+)  # the model re-issuing the call
+async def refund(order_id: str, ctx: ToolContext) -> str: ...
+```
+
+| `GuardConfig` field | Default | Meaning |
+|---|---|---|
+| `enabled` | `True` | `False`: no lease, no attempt records (the bus still redelivers a lost request, so a tool can run twice and nothing notices). |
+| `delivery` | `at_least_once` | `at_least_once`: re-run a lost call up to `max_attempts`. `at_most_once`: a lost attempt becomes an `OutcomeUnknown` failure (the effect may or may not have happened) for the algorithm or a human to reconcile. |
+| `max_attempts` | `3` | Cap on executions of one call; beyond it the call fails with `ExecutionAbandoned` (a poison call must not loop forever). |
+| `lease_ttl_s` / `heartbeat_s` | `15` / `ttl/3` | How long a silent worker keeps its claim / how often it renews. Lower = faster takeover but more false positives from slow heartbeats. |
+| `wait_poll_s` | `0.5` | How often a worker that found the call busy re-checks. |
+| `on_lost_lease` | `cancel` | `cancel`: a worker that wakes up and finds it lost the lease stops its tool. `finish`: let it complete (its result is still fenced). |
+| `fence_results` | `True` | Reject (and audit) a result from a superseded attempt. `False`: the first finisher wins. |
+
+Per-tool settings override the handler default; inconsistent combinations (e.g. `heartbeat_s >= lease_ttl_s`)
+fail at startup. **Backend semantics differ**: Redis and in-memory leases expire by TTL, so a *frozen*
+worker is replaced after `lease_ttl_s`. Postgres leases are advisory locks bound to the database session:
+a worker that crashes or loses its connection frees them instantly, but one that is frozen *and still
+connected* keeps them, so nobody takes over until it resumes or the connection dies (use TCP keepalives /
+`idle_session_timeout`, or Redis, if you need TTL takeover of frozen processes). The fence check
+(`has(attempt n+1)` then append) is not one atomic store operation; its residual window is microseconds
+and the result id is first-writer-wins, so the worst case is one recorded result, never two.
+
 ### Guarantees and caveats (read these)
-- **Tools run at-least-once.** Work in flight when a process dies is requested again; finished work
-  is not redone. Make side-effecting tools idempotent or approval-gated.
-- **No fencing tokens.** A worker that stalls past its lease can briefly overlap with the new owner;
-  the duplicate effects are absorbed by idempotent appends, but a non-idempotent tool could run twice.
+- **Tool execution is guarded, and the guard is configurable** (next section). The library makes a
+  call run *at most once at a time* and *record exactly one result*; it cannot make an arbitrary
+  external effect (an email, a payment) exactly-once. That part belongs to the tool, via the
+  idempotency key the guard hands it.
 - **Partition count is fixed** for the life of a cluster (checked on connect). Changing it needs a new
   cluster or migration. Pick headroom (default 16).
 - **Algorithm names must be unique and identical on every worker**, and every worker in a group must
@@ -107,7 +160,8 @@ ignored and the state is replayed from the log. Bump a projection's `version` if
 - Each consumer group scans all events of its partitions (read amplification ~ number of groups).
 - Algorithms' `Engine.sweep()` (set `sweep_interval_s`) enforces deadlines of dead owners and repairs
   lost child announcements; without it a run with a deadline whose host died waits for its next event.
-- Tested with real separate OS processes and `SIGKILL` on Postgres and Redis; not yet load tested.
+- Tested with real separate OS processes and `SIGKILL` (including mid-tool-call) on Postgres and Redis;
+  not yet load tested.
 
 ## Scaling with run length
 A continuing LLM request stores only the *new* messages plus a pointer to the previous request

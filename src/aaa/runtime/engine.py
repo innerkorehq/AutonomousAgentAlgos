@@ -199,6 +199,7 @@ class Engine:
         self._tasks: set[asyncio.Task[Any]] = set()
         self._sweeper: asyncio.Task[None] | None = None
         self.last_recovery: Any = None
+        self.crashed = False  # set by abort(): models a process death
         self.subscribe(RUN_CANCEL, self._on_cancel, group="aaa.engine.cancel")
 
     async def __aenter__(self) -> Self:
@@ -220,16 +221,18 @@ class Engine:
 
     async def abort(self) -> None:
         """Hard stop without draining or completing anything — what a crash looks like to the
-        log. Runs stay open in the store; another process (or `recover()`) continues them."""
+        log. Runs stay open in the store; another process (or `recover()`) continues them.
+        Sets `crashed` so cleanup code (lease release, ...) behaves as if the process vanished."""
+        self.crashed = True
         if self._sweeper:
             self._sweeper.cancel()
+        await self.bus.abort()  # first: nothing may be acknowledged any more
         for run in self._runs.values():
             if run.timer:
                 run.timer.cancel()
         for t in list(self._tasks):
             t.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
-        await self.bus.abort()
 
     def spawn(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
         """Run background work (e.g. a long tool call) tracked for clean shutdown."""

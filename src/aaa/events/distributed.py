@@ -29,8 +29,9 @@ from dataclasses import dataclass, field
 from typing import Protocol, Self, runtime_checkable
 
 from aaa.core.ids import new_id
-from aaa.events.bus import Handler
+from aaa.events.bus import DeliverySlot, Handler, current_delivery
 from aaa.events.event import Event
+from aaa.events.guard import ExecutionGuard, LeaseGuard
 
 log = logging.getLogger("aaa.dbus")
 
@@ -187,7 +188,9 @@ class DistributedBus:
         poll_s: float = 0.5,
         lease_ttl_s: float = 6.0,
         tick_s: float = 1.0,
+        handover_timeout_s: float = 30.0,
     ) -> None:
+        self.handover_timeout_s = handover_timeout_s
         self.backend, self.member = backend, member or new_id()
         self.batch, self.poll_s, self.lease_ttl_s, self.tick_s = batch, poll_s, lease_ttl_s, tick_s
         self._subs: list[_Sub] = []
@@ -218,6 +221,10 @@ class DistributedBus:
             if group is None:
                 self._start_broadcast_for(self._subs[-1])
             self._wake.set()
+
+    def execution_guard(self) -> ExecutionGuard:
+        """Cross-process mutual exclusion for side-effecting work (same lease semantics as partitions)."""
+        return LeaseGuard(self.backend, self.member)
 
     async def publish(self, event: Event) -> None:
         """No-op by design (the store enqueues atomically with the append)."""
@@ -335,8 +342,10 @@ class DistributedBus:
         if c.task:
             c.task.cancel()
             await asyncio.gather(c.task, return_exceptions=True)
-        if release:  # graceful: finish what is in flight, then commit and hand over
-            await asyncio.gather(*(t for _, t in c.pending if t), return_exceptions=True)
+        if release:  # graceful: finish what is in flight (bounded), then commit and hand over
+            inflight = [t for _, t in c.pending if t]
+            if inflight:
+                await asyncio.wait(inflight, timeout=self.handover_timeout_s)
             await self._commit(c)
             await self.backend.release_lease(c.group, c.partition, self.member)
         else:  # lease lost: do NOT commit; the new owner resumes from the last committed cursor
@@ -360,12 +369,17 @@ class DistributedBus:
         window = asyncio.Semaphore(sub.concurrency)
 
         async def run(e: Event) -> None:
+            slot = DeliverySlot()
+            token = current_delivery.set(slot)
             try:
                 await sub.handler(e)
             except Exception:
                 log.exception("handler failed in group %s for %s", c.group, e.type)
             finally:
-                window.release()
+                current_delivery.reset(token)
+                window.release()  # a deferred event no longer occupies a concurrency slot...
+            if slot.deferral is not None:  # ...but is not acknowledged until its work finishes
+                await slot.deferral.wait()
 
         while True:
             entries = await self.backend.read(c.partition, c.read_upto, self.batch, self.poll_s)

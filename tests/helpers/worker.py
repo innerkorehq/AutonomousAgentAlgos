@@ -9,15 +9,22 @@ from aaa.events import DistributedBus
 from aaa.llm import FakeLLMClient, LLMHandler
 from aaa.llm.fake import text, tool_call
 from aaa.runtime import Engine
-from aaa.tools import ToolHandler, ToolRegistry, tool
+from aaa.tools import GuardConfig, ToolHandler, ToolRegistry, tool
 
 kind, target, member, prefix, effects = sys.argv[1:6]
 
 
-@tool
+SECONDS = float(os.environ.get("AAA_TOOL_SECONDS", "0.3"))
+DELIVERY = os.environ.get("AAA_TOOL_DELIVERY", "at_least_once")
+
+
+@tool(delivery=DELIVERY)
 async def work(n: int) -> int:
-    """do (slow) work; every real execution is recorded in a shared file"""
-    await asyncio.sleep(0.3)
+    """do (slow) work; starts go to <effects>.starts, completions to <effects>"""
+    fd = os.open(effects + ".starts", os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+    os.write(fd, f"{n} {member}\n".encode())
+    os.close(fd)
+    await asyncio.sleep(SECONDS)
     fd = os.open(effects, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
     os.write(fd, f"{n} {member}\n".encode())
     os.close(fd)
@@ -47,7 +54,14 @@ async def main() -> None:
     eng = Engine(store=store, bus=bus, sweep_interval_s=1.0)
     await eng.__aenter__()
     LLMHandler(FakeLLMClient(script)).attach(eng)
-    ToolHandler(reg).attach(eng)
+    ToolHandler(
+        reg,
+        guard=GuardConfig(
+            lease_ttl_s=float(os.environ.get("AAA_LEASE_TTL", "1.5")),
+            heartbeat_s=0.3,
+            wait_poll_s=0.2,
+        ),
+    ).attach(eng)
     eng.register(ToolLoop(reg))
     print("READY", flush=True)
     await asyncio.sleep(3600)

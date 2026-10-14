@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("aaa.recovery")
 
+# Events caused by a request that do NOT mean the request was handled: partial progress only.
+# (A tool that STARTED but never finished, or an LLM call that streamed some deltas and died, must
+# still be redelivered.)
+PROGRESS_ONLY = frozenset({"aaa.tool.started", "aaa.llm.delta"})
+
 
 @dataclass
 class RecoveryReport:
@@ -118,7 +123,7 @@ async def recover(engine: Engine, algos: list[Algorithm]) -> dict[str, RunHandle
         if engine.is_done(sid):
             continue
         events = await engine.store.read(sid)
-        reacted = {e.causation_id for e in events if e.causation_id}
+        reacted = {e.causation_id for e in events if e.causation_id and e.type not in PROGRESS_ONLY}
         for e in events:
             if e.type != RUN_COMPLETED and e.id not in reacted:
                 await engine.bus.publish(e)

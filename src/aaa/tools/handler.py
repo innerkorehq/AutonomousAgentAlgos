@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from aaa.events import Event
+from aaa.events.bus import defer_ack
+from aaa.events.guard import ExecutionGuard, LocalGuard
 from aaa.runtime import Engine
+from aaa.tools.guard import Delivery, GuardConfig, LostLease
 from aaa.tools.tool import Tool, ToolArgsError, ToolContext, ToolRegistry
 
 REQUESTED = "aaa.tool.requested"
+STARTED = "aaa.tool.started"
 COMPLETED = "aaa.tool.completed"
 FAILED = "aaa.tool.failed"
+FENCED = "aaa.tool.fenced"
+STALE_RESULT = "aaa.tool.stale_result"
 APPROVAL_REQUESTED = "aaa.approval.requested"
 APPROVAL_GRANTED = "aaa.approval.granted"
 APPROVAL_DENIED = "aaa.approval.denied"
@@ -18,20 +25,45 @@ APPROVAL_DENIED = "aaa.approval.denied"
 class ToolHandler:
     """Executes `aaa.tool.requested` {call_id, name, arguments}.
 
-    - Idempotent per (run, call_id): redelivered requests never re-execute a side effect.
-    - Tools with requires_approval wait for an external `aaa.approval.granted|denied`
-      {call_id} event (e.g. RunHandle.signal) — enforced here, outside the model's control.
+    - Durable: the bus message stays unacknowledged until the tool finishes (`defer_ack`), so a
+      worker that dies mid-call has the request redelivered to another worker.
+    - Guarded (see aaa.tools.guard): an exclusive execution lease with heartbeat, numbered attempt
+      records (the fencing token), a delivery policy (at-least-once with a cap, or at-most-once),
+      stale-result rejection, and an idempotency key handed to the tool. All configurable globally
+      via `guard=` and per tool.
+    - Tools with requires_approval wait for an external `aaa.approval.granted|denied` {call_id}
+      event (e.g. RunHandle.signal), enforced outside the model's control.
     - Executions run as tracked background tasks in bounded pools, so a tool that waits on a
       child run (delegation) can never starve the pool its child needs.
-    - Failures (bad args, timeout, exception) become `aaa.tool.failed` facts the model sees."""
+    - Failures (bad args, timeout, exception, lost attempt) become `aaa.tool.failed` facts the
+      model sees."""
 
-    def __init__(self, registry: ToolRegistry, *, pools: dict[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        *,
+        pools: dict[str, int] | None = None,
+        guard: GuardConfig | dict[str, Any] | None = None,
+    ) -> None:
         self.registry = registry
+        self.guard = guard if isinstance(guard, GuardConfig) else GuardConfig(**(guard or {}))
         limits = {"default": 16, "delegate": 8, **(pools or {})}
         self._sems = {k: asyncio.Semaphore(v) for k, v in limits.items()}
         self._started: set[tuple[str, str]] = set()
         self._tasks: dict[str, set[asyncio.Task[Any]]] = {}
+        self._exec_guard: ExecutionGuard = LocalGuard()
+        self.worker = "local"
         self.engine: Engine | None = None
+
+    def config_for(self, t: Tool) -> GuardConfig:
+        """Effective guard configuration of a tool: handler default + the tool's overrides."""
+        return self.guard.merged(t.guard)
+
+    def _validate(self) -> None:
+        for name in self.registry.names():
+            tool = self.registry.get(name)
+            assert tool is not None
+            self.config_for(tool)  # raises on inconsistent overrides, at startup rather than at 3am
 
     def attach(self, engine: Engine) -> None:
         """One tool executor per engine: later handlers merge their tools into the first, so
@@ -39,14 +71,20 @@ class ToolHandler:
         existing: ToolHandler | None = getattr(engine, "_tool_handler", None)
         if existing is not None:
             existing.registry.extend(self.registry)
+            existing._validate()
             return
+        self._validate()
         engine._tool_handler = self  # type: ignore[attr-defined]
         self.engine = engine
+        if hasattr(engine.bus, "execution_guard"):
+            self._exec_guard = engine.bus.execution_guard()
+        self.worker = str(getattr(engine.bus, "member", "local"))
         engine.subscribe(REQUESTED, self._on_requested, group="aaa.tool.request")
         engine.subscribe(APPROVAL_GRANTED, self._on_granted, group="aaa.tool.granted")
         engine.subscribe(APPROVAL_DENIED, self._on_denied, group="aaa.tool.denied")
         engine.subscribe("aaa.run.completed", self._on_run_done)
 
+    # -- helpers ----------------------------------------------------------------------------
     @staticmethod
     def _fail(e: Event, call_id: str, name: str, etype: str, msg: str) -> Event:
         return e.caused(
@@ -60,6 +98,15 @@ class ToolHandler:
         assert self.engine
         return await self.engine.store.has(req.stream, f"{req.id}:result")
 
+    async def _attempts_started(self, req: Event, limit: int) -> int:
+        """How many numbered attempts of this call were durably recorded before this one."""
+        assert self.engine
+        n = 0
+        while n < limit and await self.engine.store.has(req.stream, f"{req.id}:attempt:{n + 1}"):
+            n += 1
+        return n
+
+    # -- bus handlers -----------------------------------------------------------------------
     async def _on_requested(self, e: Event) -> list[Event]:
         call_id, name = e.data["call_id"], e.data["name"]
         t = self.registry.get(name)
@@ -118,38 +165,200 @@ class ToolHandler:
             t.cancel()
         return []
 
+    # -- execution --------------------------------------------------------------------------
     def _launch(self, req: Event, t: Tool) -> None:
+        """Start the call in the background WITHOUT acknowledging the bus message: it is
+        acknowledged only when the call is finished (or abandoned), so a crash redelivers it."""
         assert self.engine
         key = (req.stream, req.data["call_id"])
         if key in self._started:
             return
         self._started.add(key)
-        task = self.engine.spawn(self._execute(req, t))
+        deferral = defer_ack()
+        task = self.engine.spawn(self._run(req, t, deferral, key))
         bucket = self._tasks.setdefault(req.run_id or "", set())
         bucket.add(task)
         task.add_done_callback(bucket.discard)
 
-    async def _execute(self, req: Event, t: Tool) -> None:
+    async def _run(self, req: Event, t: Tool, deferral: Any, key: tuple[str, str]) -> None:
+        try:
+            cfg = self.config_for(t)
+            if cfg.enabled:
+                await self._run_guarded(req, t, cfg)
+            else:
+                await self._run_attempt(req, t, cfg, attempt=1, lease_key=None)
+        finally:
+            self._started.discard(key)  # a later redelivery may legitimately run a new attempt
+            deferral.release()
+
+    def _idempotency_key(self, req: Event, t: Tool) -> str:
+        if t.idempotency_key is not None:
+            return str(t.idempotency_key(req.data.get("arguments") or {}))
+        return f"{req.stream}/{req.data['call_id']}"
+
+    async def _run_guarded(self, req: Event, t: Tool, cfg: GuardConfig) -> None:
+        assert self.engine
+        eng, lease = self.engine, f"{req.stream}/{req.id}"
+        while True:  # 1. EXCLUSION: wait until no other live worker is running this call
+            if await self._already_resolved(req) or eng.is_done(req.run_id or ""):
+                return
+            if await self._exec_guard.acquire(lease, cfg.lease_ttl_s):
+                break
+            await asyncio.sleep(cfg.wait_poll_s)
+        try:
+            if await self._already_resolved(req):  # finished while we waited
+                return
+            prior = await self._attempts_started(req, max(cfg.max_attempts, 1))
+            if (
+                prior
+            ):  # a previous attempt began and did not finish: it died, stalled, or was cancelled
+                if cfg.delivery is Delivery.AT_MOST_ONCE:
+                    await eng.emit(
+                        self._fail(
+                            req,
+                            req.data["call_id"],
+                            t.name,
+                            "OutcomeUnknown",
+                            f"attempt {prior} of this call started on another worker and never reported a result, "
+                            "so it may already have taken effect. It was NOT retried because this tool is "
+                            "at_most_once. Verify the real-world state before trying again.",
+                        )
+                    )
+                    return
+                if prior >= cfg.max_attempts:
+                    await eng.emit(
+                        self._fail(
+                            req,
+                            req.data["call_id"],
+                            t.name,
+                            "ExecutionAbandoned",
+                            f"gave up after {prior} attempts that each started and never finished "
+                            "(the call may be crashing workers).",
+                        )
+                    )
+                    return
+            attempt = prior + 1
+            marker = await eng.emit(  # 2. FENCING: the attempt number is recorded BEFORE running
+                req.caused(
+                    STARTED,
+                    {
+                        "call_id": req.data["call_id"],
+                        "name": t.name,
+                        "attempt": attempt,
+                        "worker": self.worker,
+                        "idempotency_key": self._idempotency_key(req, t),
+                    },
+                    id=f"{req.id}:attempt:{attempt}",
+                )
+            )
+            if (
+                marker is not None and marker.dup
+            ):  # another worker claimed this number: not ours to run
+                return
+            await self._run_attempt(req, t, cfg, attempt=attempt, lease_key=lease)
+        finally:
+            if (
+                not eng.crashed
+            ):  # a real crash releases nothing; the lease must expire / the session die
+                await self._exec_guard.release(lease)
+
+    async def _heartbeat(self, lease: str, cfg: GuardConfig, lost: asyncio.Event) -> None:
+        last_ok = time.monotonic()
+        while True:
+            await asyncio.sleep(cfg.beat)
+            try:
+                if not await self._exec_guard.renew(lease, cfg.lease_ttl_s):
+                    lost.set()
+                    return
+                last_ok = time.monotonic()
+            except Exception:  # noqa: BLE001 - a backend blip is not loss until the lease could have expired
+                if time.monotonic() - last_ok >= cfg.lease_ttl_s:
+                    lost.set()
+                    return
+
+    async def _invoke(self, req: Event, t: Tool, attempt: int) -> Event:
+        """Run the tool; always returns the event to record (completed or failed)."""
         assert self.engine
         call_id = req.data["call_id"]
         sem = self._sems.get(t.pool, self._sems["default"])
         try:
             async with sem:
-                ctx = ToolContext(self.engine, req.run_id or "", call_id)
+                ctx = ToolContext(
+                    self.engine,
+                    req.run_id or "",
+                    call_id,
+                    attempt=attempt,
+                    fence=attempt,
+                    idempotency_key=self._idempotency_key(req, t),
+                )
                 result = await asyncio.wait_for(
                     t.invoke(req.data.get("arguments") or {}, ctx), t.timeout_s
                 )
-            out = req.caused(
+            return req.caused(
                 COMPLETED,
                 {"call_id": call_id, "name": t.name, "result": result},
                 id=f"{req.id}:result",
             )
         except ToolArgsError as exc:
-            out = self._fail(req, call_id, t.name, "InvalidArguments", str(exc))
+            return self._fail(req, call_id, t.name, "InvalidArguments", str(exc))
         except TimeoutError:
-            out = self._fail(req, call_id, t.name, "Timeout", f"timed out after {t.timeout_s}s")
+            return self._fail(req, call_id, t.name, "Timeout", f"timed out after {t.timeout_s}s")
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - any tool failure is reported to the model
-            out = self._fail(req, call_id, t.name, type(exc).__name__, str(exc))
-        await self.engine.emit(out)
+            return self._fail(req, call_id, t.name, type(exc).__name__, str(exc))
+
+    async def _run_attempt(
+        self, req: Event, t: Tool, cfg: GuardConfig, *, attempt: int, lease_key: str | None
+    ) -> None:
+        assert self.engine
+        eng = self.engine
+        if lease_key is None:  # guard disabled: just run it
+            await eng.emit(await self._invoke(req, t, attempt))
+            return
+        lost = asyncio.Event()
+        beat = asyncio.create_task(self._heartbeat(lease_key, cfg, lost))
+        work = asyncio.create_task(self._invoke(req, t, attempt))
+        lost_wait = asyncio.create_task(lost.wait())
+        try:
+            await asyncio.wait({work, lost_wait}, return_when=asyncio.FIRST_COMPLETED)
+            if lost.is_set() and not work.done() and cfg.on_lost_lease is LostLease.CANCEL:
+                work.cancel()  # we are no longer the only runner: stop, and record nothing
+                await asyncio.gather(work, return_exceptions=True)
+                await eng.emit(
+                    req.caused(
+                        FENCED,
+                        {
+                            "call_id": req.data["call_id"],
+                            "attempt": attempt,
+                            "worker": self.worker,
+                            "reason": "execution lease lost; attempt cancelled",
+                        },
+                        id=f"{req.id}:fenced:{attempt}",
+                    )
+                )
+                return
+            out = await work
+        finally:
+            for task in (beat, lost_wait, work):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(beat, lost_wait, work, return_exceptions=True)
+        # 3. FENCED WRITE: a newer attempt supersedes this one, so its result must not be recorded
+        if cfg.fence_results and await eng.store.has(req.stream, f"{req.id}:attempt:{attempt + 1}"):
+            await eng.emit(
+                req.caused(
+                    STALE_RESULT,
+                    {
+                        "call_id": req.data["call_id"],
+                        "attempt": attempt,
+                        "superseded_by": attempt + 1,
+                        "worker": self.worker,
+                        "outcome": out.type,
+                        "data": out.data,
+                    },
+                    id=f"{req.id}:stale:{attempt}",
+                )
+            )
+            return
+        await eng.emit(out)

@@ -206,3 +206,83 @@ def test_partition_function_is_stable():
 
     assert partition_of("run-123", 16) == partition_of("run-123", 16)
     assert {partition_of(f"s{i}", 16) for i in range(200)} == set(range(16))
+
+
+async def test_deferred_ack_holds_the_cursor_not_the_window_and_redelivers_after_a_crash(cluster):
+    from aaa.events import defer_ack, partition_of
+
+    n1, n2 = await cluster.node(), await cluster.node()
+    p = partition_of("dstream", cluster.partitions)
+    seen_a, got_b, held = [], [], {}
+
+    async def ha(e):
+        seen_a.append(e.data["i"])
+        if e.data["i"] == 1:
+            held["d"] = defer_ack()  # event 1's real work continues in the background
+
+    async def hb(e):
+        got_b.append(e.data["i"])
+
+    ba = n1.bus(member="A")
+    ba.subscribe("t", ha, group="g")
+    await ba.__aenter__()
+    for i in range(6):
+        await put(n1, "dstream", i)
+    await until(
+        lambda: seen_a == [0, 1, 2, 3, 4, 5]
+    )  # concurrency=1, yet nothing is blocked behind 1
+    await asyncio.sleep(0.4)
+    assert await n1.backend.get_cursor("g", p) == 1  # only event 0 is acknowledged
+    await ba.abort()  # crash while event 1's work is unfinished
+
+    bb = n2.bus(member="B")
+    bb.subscribe("t", hb, group="g")
+    async with bb:
+        await until(lambda: got_b[:5] == [1, 2, 3, 4, 5], 25)
+    assert 0 not in got_b
+
+
+async def test_releasing_a_deferral_acknowledges_the_event_and_everything_behind_it(cluster):
+    from aaa.events import defer_ack, partition_of
+
+    node = await cluster.node()
+    p = partition_of("rstream", cluster.partitions)
+    held = {}
+
+    async def h(e):
+        if e.data["i"] == 1:
+            held["d"] = defer_ack()
+
+    bus = node.bus()
+    bus.subscribe("t", h, group="g")
+    async with bus:
+        for i in range(5):
+            await put(node, "rstream", i)
+        await until(lambda: "d" in held)
+        await asyncio.sleep(0.4)
+        assert await node.backend.get_cursor("g", p) == 1
+        held["d"].release()
+        held["d"].release()  # idempotent
+        await until(lambda: node.backend.get_cursor("g", p), 5)
+        await until(_cursor_is(node, p, 5), 10)
+
+
+def _cursor_is(node, p, want):
+    async def check():
+        return await node.backend.get_cursor("g", p) == want
+
+    return check
+
+
+def test_defer_ack_outside_a_durable_bus_is_inert():
+    import asyncio as aio
+
+    from aaa.events import defer_ack
+
+    async def run():
+        d = defer_ack()
+        d.release()
+        await d.wait()
+        return d.active
+
+    assert aio.run(run()) is False

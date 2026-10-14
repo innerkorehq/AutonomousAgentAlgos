@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 from pydantic_core import to_jsonable_python
 
 from aaa.llm.types import ToolSpec
+from aaa.tools.guard import GuardConfig, check_overrides
 
 
 class ToolError(Exception):
@@ -22,11 +23,19 @@ class ToolArgsError(ToolError):
 
 @dataclass
 class ToolContext:
-    """Injected into tools that declare a `ctx: ToolContext` parameter."""
+    """Injected into tools that declare a `ctx: ToolContext` parameter.
+
+    `idempotency_key` is stable across every attempt and every worker for the same logical call
+    (default `<run>/<call id>`, or whatever the tool's `idempotency_key=` function returns). Pass it
+    to the system you are calling so a repeated attempt cannot repeat the effect. `attempt`/`fence`
+    is the 1-based, monotonically increasing execution number of this call."""
 
     engine: Any
     run_id: str
     call_id: str
+    attempt: int = 1
+    fence: int = 1
+    idempotency_key: str = ""
 
 
 def _strip_titles(schema: Any) -> Any:
@@ -49,10 +58,21 @@ class Tool:
         requires_approval: bool = False,
         timeout_s: float = 60.0,
         pool: str = "default",
+        delivery: str | None = None,
+        idempotency_key: Callable[[dict[str, Any]], str] | None = None,
+        guard: dict[str, Any] | GuardConfig | None = None,
     ) -> None:
+        """`delivery`, `idempotency_key` and `guard` configure the stalled-worker guard for this
+        tool (see aaa.tools.guard); anything unset inherits the ToolHandler's default."""
         self.fn, self.name = fn, name or fn.__name__
         self.description = (description or inspect.getdoc(fn) or "").strip()
         self.requires_approval, self.timeout_s, self.pool = requires_approval, timeout_s, pool
+        self.idempotency_key = idempotency_key
+        if isinstance(guard, GuardConfig):
+            self.guard: dict[str, Any] | GuardConfig = guard
+        else:
+            self.guard = {**(guard or {}), **({"delivery": delivery} if delivery else {})}
+            check_overrides(self.guard)  # field-level errors surface at definition time, not at 3am
         sig, hints = inspect.signature(fn), get_type_hints(fn)
         self.wants_ctx = "ctx" in sig.parameters
         fields: dict[str, Any] = {}

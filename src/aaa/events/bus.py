@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import fnmatch
 import logging
 from collections.abc import Awaitable, Callable, Iterable
@@ -8,8 +9,56 @@ from dataclasses import dataclass, field
 from typing import Protocol, Self
 
 from aaa.events.event import Event
+from aaa.events.guard import ExecutionGuard, LocalGuard
 
 log = logging.getLogger("aaa.bus")
+
+
+class Deferral:
+    """Holds the acknowledgement of the event currently being handled.
+
+    A handler that hands its real work to a background task calls `defer_ack()` first and
+    `release()`s when that work is finished (in a `finally`). Until then a durable bus will not
+    commit its cursor past the event, so if the process dies the event is redelivered. Releasing
+    twice is harmless. Buses without durable delivery return an inert Deferral."""
+
+    def __init__(self, active: bool = True) -> None:
+        self.active = active
+        self._fut: asyncio.Future[None] | None = (
+            asyncio.get_running_loop().create_future() if active else None
+        )
+
+    def release(self) -> None:
+        if self._fut is not None and not self._fut.done():
+            self._fut.set_result(None)
+
+    async def wait(self) -> None:
+        if self._fut is not None:
+            await asyncio.shield(self._fut)
+
+
+class DeliverySlot:
+    """Set by a durable bus around each handler invocation (see `defer_ack`)."""
+
+    def __init__(self) -> None:
+        self.deferral: Deferral | None = None
+
+    def defer(self) -> Deferral:
+        if self.deferral is None:
+            self.deferral = Deferral()
+        return self.deferral
+
+
+current_delivery: contextvars.ContextVar[DeliverySlot | None] = contextvars.ContextVar(
+    "aaa_current_delivery", default=None
+)
+
+
+def defer_ack() -> Deferral:
+    """Call from inside a handler. See `Deferral`."""
+    slot = current_delivery.get()
+    return slot.defer() if slot is not None else Deferral(active=False)
+
 
 # A handler reads an event and returns follow-up events (facts/commands) or None.
 Handler = Callable[[Event], Awaitable[Iterable[Event] | None]]
@@ -54,6 +103,7 @@ class InProcessBus:
         self._inflight = 0
         self._idle = asyncio.Event()
         self._idle.set()
+        self._guard = LocalGuard()
 
     def subscribe(
         self,
@@ -73,6 +123,9 @@ class InProcessBus:
 
     def _spawn(self, sub: _Sub) -> None:
         sub.workers = [asyncio.create_task(self._work(sub)) for _ in range(sub.concurrency)]
+
+    def execution_guard(self) -> ExecutionGuard:
+        return self._guard
 
     async def __aenter__(self) -> Self:
         self._running = True

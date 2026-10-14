@@ -1,4 +1,4 @@
-from aaa.events.bus import ClientBus, EventBus, Handler, InProcessBus
+from aaa.events.bus import ClientBus, Deferral, EventBus, Handler, InProcessBus, defer_ack
 from aaa.events.distributed import BusBackend, DistributedBus, MemoryBusBackend, partition_of
 from aaa.events.event import BlobRef, Event
 from aaa.events.projection import Loaded, Projection
@@ -12,6 +12,7 @@ __all__ = [
     "BlobRef",
     "BusBackend",
     "ClientBus",
+    "Deferral",
     "DistributedBus",
     "Event",
     "EventBus",
@@ -27,5 +28,6 @@ __all__ = [
     "SchemaRegistry",
     "SnapshotCapable",
     "StoredSnapshot",
+    "defer_ack",
     "partition_of",
 ]
