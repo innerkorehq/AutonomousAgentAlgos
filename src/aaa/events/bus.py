@@ -4,10 +4,12 @@ import asyncio
 import contextvars
 import fnmatch
 import logging
+import random
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Protocol, Self
 
+from aaa.core.errors import Redeliver
 from aaa.events.event import Event
 from aaa.events.guard import ExecutionGuard, LocalGuard
 
@@ -94,8 +96,16 @@ class InProcessBus:
     logged and isolated: one bad handler never kills the bus or other subscribers.
     Subscriptions sharing a `group` compete for events (one delivery per group)."""
 
-    def __init__(self, queue_size: int = 1024) -> None:
+    def __init__(
+        self,
+        queue_size: int = 1024,
+        *,
+        redeliver_base_s: float = 0.2,
+        redeliver_max_s: float = 5.0,
+    ) -> None:
         self._queue_size = queue_size
+        self.redeliver_base_s, self.redeliver_max_s = redeliver_base_s, redeliver_max_s
+        self._closing = asyncio.Event()
         self._subs: list[_Sub] = []
         self._groups: dict[str, list[_Sub]] = {}
         self._rr: dict[str, int] = {}
@@ -134,6 +144,7 @@ class InProcessBus:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
+        self._closing.set()  # handlers waiting to be redelivered stop waiting and are dropped
         await self.drain()
         for s in self._subs:
             for _ in s.workers:
@@ -188,12 +199,37 @@ class InProcessBus:
     async def _work(self, sub: _Sub) -> None:
         while (event := await sub.queue.get()) is not None:
             try:
-                for follow in await sub.handler(event) or ():
-                    await self.publish(follow)
-            except Exception:
-                log.exception("handler failed for %s", event.type)
+                await self._deliver(sub, event)
             finally:
                 self._done()
+
+    async def _deliver(self, sub: _Sub, event: Event) -> None:
+        """Run the handler. A handler that raises `Redeliver` (a temporary problem, e.g. the event
+        store is down) is NOT acknowledged: it is retried with backoff, in order, until it succeeds or
+        the bus shuts down. Any other exception is logged and the event is dropped as before."""
+        attempt = 0
+        while True:
+            try:
+                for follow in await sub.handler(event) or ():
+                    await self.publish(follow)
+                return
+            except Redeliver as r:
+                attempt += 1
+                delay = min(self.redeliver_max_s, self.redeliver_base_s * 2 ** (attempt - 1))
+                log.warning(
+                    "redelivering %s (attempt %d, in %.1fs): %s", event.type, attempt, delay, r
+                )
+                try:
+                    await asyncio.wait_for(
+                        self._closing.wait(), delay * (0.5 + random.random() / 2)
+                    )
+                    log.error("bus closing; %s dropped while waiting to be redelivered", event.type)
+                    return
+                except TimeoutError:
+                    continue
+            except Exception:
+                log.exception("handler failed for %s", event.type)
+                return
 
 
 class ClientBus:

@@ -28,7 +28,7 @@ Look at the **last** event and ask what should have happened next.
 1. Does the log end as above? Fix the missing piece.
 2. Did you set a `Budget(deadline_s=...)`? Without one nothing bounds a run that is waiting on something that will never arrive.
 3. Cluster: is a worker running that algorithm? Is `sweep_interval_s` set?
-4. A brief **store outage** during a run can strand it ([known limitation](../about/limitations.md#store-outages-during-a-run)); the deadline is the backstop.
+4. Look for `store unavailable ... asking the bus to redeliver` or `retry N in ...s` warnings in the logs: the store was down. Runs resume by themselves when it returns; if the outage outlasts `store_retry` the bus keeps redelivering. A deadline is still the backstop. See [store outages](../about/limitations.md#store-outages-during-a-run).
 
 ### `LLMConfigError: environment variable X is not set`
 
@@ -72,6 +72,10 @@ You passed two different instances with the same name. Use unique names.
 ### `ValueError: this database was created with N partitions, not M`
 
 The partition count is fixed per database (or Redis prefix). Use the original value.
+
+### `StoreUnavailable` raised from `engine.start()` / `run.signal()`
+
+The store was unreachable for longer than `Engine(store_retry=...)` allows (default 30 s). Nothing was recorded, so it is safe to retry; return a 503 to your caller.
 
 ### A tool ran twice
 

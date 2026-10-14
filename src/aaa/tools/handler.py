@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
+from aaa.core.retry import RetryPolicy
 from aaa.events import Event
 from aaa.events.bus import defer_ack
 from aaa.events.guard import ExecutionGuard, LocalGuard
 from aaa.runtime import Engine
 from aaa.tools.guard import Delivery, GuardConfig, LostLease
 from aaa.tools.tool import Tool, ToolArgsError, ToolContext, ToolRegistry
+
+log = logging.getLogger("aaa.tools")
 
 REQUESTED = "aaa.tool.requested"
 STARTED = "aaa.tool.started"
@@ -20,6 +24,12 @@ STALE_RESULT = "aaa.tool.stale_result"
 APPROVAL_REQUESTED = "aaa.approval.requested"
 APPROVAL_GRANTED = "aaa.approval.granted"
 APPROVAL_DENIED = "aaa.approval.denied"
+
+
+class _Outcome:
+    """Whether a launched call's outcome reached the log (False => do not acknowledge the message)."""
+
+    recorded = True
 
 
 class ToolHandler:
@@ -44,8 +54,13 @@ class ToolHandler:
         *,
         pools: dict[str, int] | None = None,
         guard: GuardConfig | dict[str, Any] | None = None,
+        result_retry: RetryPolicy | None = None,
     ) -> None:
         self.registry = registry
+        # A tool that already RAN must not lose its result to a store outage: by default keep retrying
+        # (with backoff) until it is recorded. A bounded policy makes the handler give up and leave
+        # the bus message unacknowledged instead, so the call is redelivered after the outage.
+        self.result_retry = result_retry or RetryPolicy.forever()
         self.guard = guard if isinstance(guard, GuardConfig) else GuardConfig(**(guard or {}))
         limits = {"default": 16, "delegate": 8, **(pools or {})}
         self._sems = {k: asyncio.Semaphore(v) for k, v in limits.items()}
@@ -96,13 +111,18 @@ class ToolHandler:
     async def _already_resolved(self, req: Event) -> bool:
         """O(1): a request's result always has the deterministic id `<request id>:result`."""
         assert self.engine
-        return await self.engine.store.has(req.stream, f"{req.id}:result")
+        eng = self.engine
+        return await eng.retry(lambda: eng.store.has(req.stream, f"{req.id}:result"), "read")
 
     async def _attempts_started(self, req: Event, limit: int) -> int:
         """How many numbered attempts of this call were durably recorded before this one."""
         assert self.engine
         n = 0
-        while n < limit and await self.engine.store.has(req.stream, f"{req.id}:attempt:{n + 1}"):
+        eng = self.engine
+        while n < limit:
+            nxt = f"{req.id}:attempt:{n + 1}"
+            if not await eng.retry(lambda nxt=nxt: eng.store.has(req.stream, nxt), "read"):
+                break
             n += 1
         return n
 
@@ -134,7 +154,8 @@ class ToolHandler:
 
     async def _find_request(self, e: Event, call_id: str) -> Event | None:
         assert self.engine
-        for x in await self.engine.store.read(e.stream):
+        eng = self.engine
+        for x in await eng.retry(lambda: eng.store.read(e.stream), "read"):
             if x.type == REQUESTED and x.data.get("call_id") == call_id:
                 return await self.engine.hydrate(x)
         return None
@@ -175,21 +196,62 @@ class ToolHandler:
             return
         self._started.add(key)
         deferral = defer_ack()
-        task = self.engine.spawn(self._run(req, t, deferral, key))
+        outcome = _Outcome()
+        task = self.engine.spawn(self._run(req, t, outcome))
+
+        def done(_: asyncio.Task[Any]) -> None:
+            # A done-callback, not a `finally` in the coroutine: it also fires when the task is
+            # cancelled before its first step ever ran (a run that completes right after the call
+            # was launched). A `finally` would never execute then, and the bus message would stay
+            # unacknowledged until the handover timeout.
+            self._started.discard(key)  # a later redelivery may legitimately run a new attempt
+            if outcome.recorded:
+                deferral.release()
+
+        task.add_done_callback(done)
         bucket = self._tasks.setdefault(req.run_id or "", set())
         bucket.add(task)
         task.add_done_callback(bucket.discard)
 
-    async def _run(self, req: Event, t: Tool, deferral: Any, key: tuple[str, str]) -> None:
+    async def _run(self, req: Event, t: Tool, outcome: _Outcome) -> None:
+        assert self.engine
         try:
             cfg = self.config_for(t)
             if cfg.enabled:
                 await self._run_guarded(req, t, cfg)
             else:
                 await self._run_attempt(req, t, cfg, attempt=1, lease_key=None)
-        finally:
-            self._started.discard(key)  # a later redelivery may legitimately run a new attempt
-            deferral.release()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            if self.engine.is_transient(exc):
+                outcome.recorded = False  # leave the bus message unacknowledged: redelivered later
+                log.error(
+                    "tool call %s (%s): its outcome could not be recorded (%s: %s). The bus message "
+                    "is left unacknowledged so the call is redelivered once the store is back.",
+                    req.data["call_id"],
+                    t.name,
+                    type(exc).__name__,
+                    exc,
+                )
+            else:  # a bug in the tool machinery: tell the run instead of stranding it
+                log.exception("tool call %s (%s) failed internally", req.data["call_id"], t.name)
+                try:
+                    await self.engine.emit(
+                        self._fail(
+                            req,
+                            req.data["call_id"],
+                            t.name,
+                            "InternalError",
+                            f"{type(exc).__name__}: {exc}",
+                        ),
+                        retry=self.result_retry,
+                    )
+                except Exception:
+                    outcome.recorded = False
+                    log.exception(
+                        "could not record the internal failure of %s", req.data["call_id"]
+                    )
 
     def _idempotency_key(self, req: Event, t: Tool) -> str:
         if t.idempotency_key is not None:
@@ -314,7 +376,7 @@ class ToolHandler:
         assert self.engine
         eng = self.engine
         if lease_key is None:  # guard disabled: just run it
-            await eng.emit(await self._invoke(req, t, attempt))
+            await eng.emit(await self._invoke(req, t, attempt), retry=self.result_retry)
             return
         lost = asyncio.Event()
         beat = asyncio.create_task(self._heartbeat(lease_key, cfg, lost))
@@ -339,13 +401,20 @@ class ToolHandler:
                 )
                 return
             out = await work
+            await self._commit(req, out, cfg, attempt)  # lease stays alive while we record it
         finally:
             for task in (beat, lost_wait, work):
                 if not task.done():
                     task.cancel()
             await asyncio.gather(beat, lost_wait, work, return_exceptions=True)
+
+    async def _commit(self, req: Event, out: Event, cfg: GuardConfig, attempt: int) -> None:
+        eng = self.engine
+        assert eng
         # 3. FENCED WRITE: a newer attempt supersedes this one, so its result must not be recorded
-        if cfg.fence_results and await eng.store.has(req.stream, f"{req.id}:attempt:{attempt + 1}"):
+        if cfg.fence_results and await eng.retry(
+            lambda: eng.store.has(req.stream, f"{req.id}:attempt:{attempt + 1}"), "read"
+        ):
             await eng.emit(
                 req.caused(
                     STALE_RESULT,
@@ -358,7 +427,8 @@ class ToolHandler:
                         "data": out.data,
                     },
                     id=f"{req.id}:stale:{attempt}",
-                )
+                ),
+                retry=self.result_retry,
             )
             return
-        await eng.emit(out)
+        await eng.emit(out, retry=self.result_retry)

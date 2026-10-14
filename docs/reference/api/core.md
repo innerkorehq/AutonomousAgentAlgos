@@ -20,6 +20,18 @@
 
 ::: aaa.core.SchemaError
 
+## Resilience
+
+::: aaa.core.RetryPolicy
+
+::: aaa.core.is_transient
+
+::: aaa.core.retrying
+
+::: aaa.core.StoreUnavailable
+
+::: aaa.core.Redeliver
+
 ## Ids
 
 ::: aaa.core.new_id

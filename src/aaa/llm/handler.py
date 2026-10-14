@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
 
+from aaa.core.retry import RetryPolicy
 from aaa.events import Event
 from aaa.llm.client import LLMClient
 from aaa.llm.errors import FatalError, LLMError
 from aaa.llm.streaming import collect
 from aaa.llm.types import LLMRequest, LLMResponse, Message
 from aaa.runtime import Engine
+
+log = logging.getLogger("aaa.llm")
 
 REQUESTED = "aaa.llm.requested"
 COMPLETED = "aaa.llm.completed"
@@ -53,11 +57,17 @@ class LLMHandler:
             async for ch in stream(req):
                 if ch.text and self.emit_deltas and self.engine:
                     n += 1
-                    await self.engine.emit(
-                        e.caused(
-                            DELTA, {"text": ch.text, "tag": e.data.get("tag")}, id=f"{e.id}:d{n}"
+                    try:  # deltas are a live view: losing one must never fail (and re-bill) the call
+                        await self.engine.emit(
+                            e.caused(
+                                DELTA,
+                                {"text": ch.text, "tag": e.data.get("tag")},
+                                id=f"{e.id}:d{n}",
+                            ),
+                            retry=RetryPolicy(max_attempts=1),
                         )
-                    )
+                    except Exception:
+                        log.warning("could not publish a stream delta; continuing", exc_info=True)
                 yield ch
 
         return await collect(gen())
@@ -76,7 +86,8 @@ class LLMHandler:
         self.rebuilds += 1
         requests: dict[str, Event] = {}
         replies: dict[str, Event] = {}
-        for ev in await self.engine.store.read(stream):
+        eng = self.engine
+        for ev in await eng.retry(lambda: eng.store.read(stream), "read"):
             if ev.type == REQUESTED:
                 requests[ev.id] = ev
             elif ev.type == COMPLETED and ev.id.endswith(":result"):

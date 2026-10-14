@@ -22,6 +22,8 @@ async with Engine(store=SQLiteEventStore("agent.db")) as engine:  # durable
     | `blobs` | none | A `BlobStore`; enables [claim-check](../guides/large-payloads.md). |
     | `claim_threshold` | `16384` | Bytes of JSON above which an event's payload moves to the blob store. |
     | `sweep_interval_s` | none | Run [`sweep()`](#sweeping) on this period. Recommended in a cluster. |
+    | `store_retry` | `RetryPolicy()` | How long to ride out a store outage (backoff + jitter) before the bus redelivers the event instead. Raises `StoreUnavailable` to *your* calls (`start`, `signal`) after the budget. |
+    | `is_transient` | built in | Predicate deciding which exceptions are outages (retry) rather than bugs (fail the run). |
 
 ## Starting a run
 

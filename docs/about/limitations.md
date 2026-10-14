@@ -45,14 +45,25 @@ embeddings, `AAA_LIVE_CHAT_PATH` for non-standard paths (e.g. `""` for Kong), `A
 
 ### Store outages during a run
 
-If the event store becomes unavailable while a handler is appending, **the reaction can be lost**:
+A temporary outage of the event store (or blob store) does **not** fail a run or lose a reaction:
 
-- A tool whose result cannot be appended does not retry; its bus message is acknowledged anyway, so it is not redelivered.
-- An exception in an algorithm handler marks the run `failed` (best effort); if that append fails too, the run is left open.
+- Store operations on the handler path are retried with bounded exponential backoff and jitter (`Engine(store_retry=RetryPolicy(...))`,
+  default: up to 30 s). Appends are idempotent on event id, so retrying one that actually committed is harmless.
+- If an *algorithm or LLM* handler still cannot finish, the engine raises `Redeliver` instead of failing the run, and the bus delivers
+  the event again later (in order) until it succeeds. Only a genuine bug in the handler fails the run.
+- A *tool result* that cannot be recorded is retried **until it is** (`ToolHandler(result_retry=...)`, default: forever), so a tool that
+  already ran is not re-run to get its result recorded. With a bounded policy, the handler gives up and leaves the bus message unacknowledged,
+  so the call is redelivered once the store is back (and then follows its [delivery policy](../guides/tool-guard.md)).
+- A distributed-bus consumer survives backend errors instead of dying (previously it could die silently while its lease kept renewing).
 
-This was reproduced: a 0.5 s outage while a tool was running left the run at `aaa.tool.started` until its deadline. Always set a deadline; run
-`sweep_interval_s` in a cluster; drill a database failover in staging. A fix (distinguish infrastructure errors from handler bugs, retry with backoff,
-and leave the message unacknowledged when appends keep failing) has been scoped as follow-up work.
+What this was tested against: scripted outages through a proxy store (in-process and cluster), a backend that errors on every read and
+cursor write, and **real dropped connections**: all Postgres backends terminated, and every Redis client killed, repeatedly, while a run was
+in flight. It has **not** been tested against a full database server restart or a managed-service failover, a stalled-but-reachable database,
+or an outage longer than your retry budgets with a worker restart in the middle. Drill those in staging.
+
+Things to know: while the store is down nothing progresses (events are the only record), a model call whose *result* could not be recorded
+within `store_retry` is requested again (you pay for the repeat; raise the budget to avoid it), and `RunHandle.signal()` / `engine.start()`
+raise `StoreUnavailable` to the caller after the budget so your API can answer 503.
 
 ### Other behavior to be aware of
 
@@ -77,7 +88,6 @@ and leave the message unacknowledged when appends keep failing) has been scoped 
 | **Classical planning algorithms** | HTN, A\*/heuristic search over a user-defined domain, PDDL/CP-SAT/MILP solver adapters, MCTS. Deliberately deferred; the data contract for them was designed but not implemented. |
 | **Vector database and S3 adapters** | `Index` and `BlobStore` are protocols; only in-memory (and file blobs) ship. |
 | **Prompt-caching and summarization helpers** | The remaining cost driver in long conversations. |
-| **Automatic recovery from store outages** | See above. |
 | **CI test workflow, PyPI release, versioned docs** | Docs are published automatically; the test suite is run locally. |
 
 Not planned unless demand appears: reinforcement-learning policies, POMDP solvers, evolutionary search, distributed consensus

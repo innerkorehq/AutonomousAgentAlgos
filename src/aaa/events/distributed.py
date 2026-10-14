@@ -21,6 +21,7 @@ import asyncio
 import fnmatch
 import logging
 import math
+import random
 import time
 import zlib
 from collections import deque
@@ -28,6 +29,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol, Self, runtime_checkable
 
+from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.events.bus import DeliverySlot, Handler, current_delivery
 from aaa.events.event import Event
@@ -163,12 +165,22 @@ class _Sub:
 
 
 @dataclass
+class _Entry:
+    """One delivered bus entry. `ok=False` means it was abandoned before completing (shutdown, lost
+    lease): it must NEVER be acknowledged, so it is redelivered to whoever owns the partition next."""
+
+    eid: int
+    task: asyncio.Task[None] | None = None
+    ok: bool = True
+
+
+@dataclass
 class _Consumer:
     group: str
     partition: int
     task: asyncio.Task[None] | None = None
     owned: bool = True
-    pending: deque[tuple[int, asyncio.Task[None] | None]] = field(default_factory=deque)
+    pending: deque[_Entry] = field(default_factory=deque)
     acked: int = 0
     read_upto: int = 0
 
@@ -189,8 +201,11 @@ class DistributedBus:
         lease_ttl_s: float = 6.0,
         tick_s: float = 1.0,
         handover_timeout_s: float = 30.0,
+        redeliver_base_s: float = 0.2,
+        redeliver_max_s: float = 5.0,
     ) -> None:
         self.handover_timeout_s = handover_timeout_s
+        self.redeliver_base_s, self.redeliver_max_s = redeliver_base_s, redeliver_max_s
         self.backend, self.member = backend, member or new_id()
         self.batch, self.poll_s, self.lease_ttl_s, self.tick_s = batch, poll_s, lease_ttl_s, tick_s
         self._subs: list[_Sub] = []
@@ -260,7 +275,7 @@ class DistributedBus:
             c.owned = False
             if c.task:
                 tasks.append(c.task)
-            tasks += [t for _, t in c.pending if t]
+            tasks += [en.task for en in c.pending if en.task]
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -343,63 +358,133 @@ class DistributedBus:
             c.task.cancel()
             await asyncio.gather(c.task, return_exceptions=True)
         if release:  # graceful: finish what is in flight (bounded), then commit and hand over
-            inflight = [t for _, t in c.pending if t]
+            inflight = [en.task for en in c.pending if en.task]
             if inflight:
                 await asyncio.wait(inflight, timeout=self.handover_timeout_s)
             await self._commit(c)
             await self.backend.release_lease(c.group, c.partition, self.member)
+            c.owned = False
+            for en in c.pending:  # whatever is still unfinished is abandoned, not acknowledged
+                if en.task and not en.task.done():
+                    en.ok = False
+                    en.task.cancel()
         else:  # lease lost: do NOT commit; the new owner resumes from the last committed cursor
-            for _, t in c.pending:
-                if t:
-                    t.cancel()
+            for en in c.pending:
+                en.ok = False
+                if en.task:
+                    en.task.cancel()
         c.owned = False
         self._consumers.pop((c.group, c.partition), None)
 
     # -- consumption ------------------------------------------------------------------------
     async def _commit(self, c: _Consumer) -> None:
         advanced = False
-        while c.pending and (c.pending[0][1] is None or c.pending[0][1].done()):
-            c.acked = c.pending.popleft()[0]
+        while (
+            c.pending
+            and c.pending[0].ok
+            and (c.pending[0].task is None or c.pending[0].task.done())
+        ):
+            c.acked = c.pending.popleft().eid
             advanced = True
         if advanced and c.owned:
             await self.backend.set_cursor(c.group, c.partition, c.acked)
 
+    def _redeliver_delay(self, attempt: int) -> float:
+        d = min(self.redeliver_max_s, self.redeliver_base_s * 2 ** (attempt - 1))
+        return d * (0.5 + random.random() / 2)
+
     async def _consume(self, sub: _Sub, c: _Consumer) -> None:
-        c.acked = c.read_upto = await self.backend.get_cursor(c.group, c.partition)
+        while True:  # a backend outage must never kill the consumer while we still hold the lease
+            try:
+                c.acked = c.read_upto = await self.backend.get_cursor(c.group, c.partition)
+                break
+            except Exception:
+                log.warning(
+                    "consumer %s/%d: cannot read cursor; retrying",
+                    c.group,
+                    c.partition,
+                    exc_info=True,
+                )
+                await asyncio.sleep(self._redeliver_delay(1))
         window = asyncio.Semaphore(sub.concurrency)
 
-        async def run(e: Event) -> None:
+        async def run(entry: _Entry, e: Event) -> None:
+            attempt = 0
             slot = DeliverySlot()
-            token = current_delivery.set(slot)
             try:
-                await sub.handler(e)
-            except Exception:
-                log.exception("handler failed in group %s for %s", c.group, e.type)
+                while True:
+                    slot = DeliverySlot()
+                    token = current_delivery.set(slot)
+                    try:
+                        await sub.handler(e)
+                        break
+                    except (
+                        Redeliver
+                    ) as r:  # temporary problem: do NOT acknowledge; try again, in order
+                        attempt += 1
+                        if slot.deferral is not None:
+                            slot.deferral.release()
+                        if not (self._running and c.owned):
+                            entry.ok = False  # abandoned: stays unacknowledged for the next owner
+                            return
+                        log.warning(
+                            "group %s: redelivering %s (attempt %d): %s",
+                            c.group,
+                            e.type,
+                            attempt,
+                            r,
+                        )
+                        await asyncio.sleep(self._redeliver_delay(attempt))
+                    except Exception:
+                        log.exception("handler failed in group %s for %s", c.group, e.type)
+                        break
+                    finally:
+                        current_delivery.reset(token)
             finally:
-                current_delivery.reset(token)
                 window.release()  # a deferred event no longer occupies a concurrency slot...
             if slot.deferral is not None:  # ...but is not acknowledged until its work finishes
                 await slot.deferral.wait()
 
         while True:
-            entries = await self.backend.read(c.partition, c.read_upto, self.batch, self.poll_s)
-            for eid, ev in entries:
-                if sub.matches(ev):
-                    await window.acquire()  # blocks while `concurrency` handlers are in flight
-                    c.pending.append((eid, asyncio.create_task(run(ev))))
-                else:
-                    c.pending.append((eid, None))
-                c.read_upto = eid
+            try:
+                entries = await self.backend.read(c.partition, c.read_upto, self.batch, self.poll_s)
+                for eid, ev in entries:
+                    entry = _Entry(eid)
+                    if sub.matches(ev):
+                        await window.acquire()  # blocks while `concurrency` handlers are in flight
+                        entry.task = asyncio.create_task(run(entry, ev))
+                    c.pending.append(entry)
+                    c.read_upto = eid
+                    await self._commit(c)
                 await self._commit(c)
-            await self._commit(c)
-            if not entries:
-                await asyncio.sleep(0)
+                if not entries:
+                    await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning(
+                    "consumer %s/%d: backend error; retrying", c.group, c.partition, exc_info=True
+                )
+                await asyncio.sleep(self._redeliver_delay(1))
 
     def _start_broadcast_for(self, sub: _Sub) -> None:
         async def run(p: int) -> None:
-            cur = await self.backend.tail(p)  # broadcast = "from now on"
             while True:
-                for eid, ev in await self.backend.read(p, cur, self.batch, self.poll_s):
+                try:
+                    cur = await self.backend.tail(p)  # broadcast = "from now on"
+                    break
+                except Exception:  # noqa: BLE001 - keep the reader alive through an outage
+                    await asyncio.sleep(self._redeliver_delay(1))
+            while True:
+                try:
+                    batch = await self.backend.read(p, cur, self.batch, self.poll_s)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.warning("broadcast reader %d: backend error; retrying", p, exc_info=True)
+                    await asyncio.sleep(self._redeliver_delay(1))
+                    continue
+                for eid, ev in batch:
                     cur = eid
                     if sub.matches(ev):
                         try:

@@ -2,6 +2,12 @@
 
 ## 0.0.1 (unreleased)
 
+**Resilience**
+
+- Store outages no longer fail runs or lose reactions: bounded retry with backoff (`Engine(store_retry=...)`), `Redeliver` so the bus delivers an event again, a tool
+  result retried until recorded (`ToolHandler(result_retry=...)`), and distributed-bus consumers that survive backend errors. Fixed a race where a tool task cancelled before its first step
+  left its bus message unacknowledged. Tested with real dropped Postgres and Redis connections.
+
 First public version. Alpha: see [Status and limitations](limitations.md).
 
 **Runtime and data**

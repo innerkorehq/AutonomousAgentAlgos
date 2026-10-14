@@ -5,14 +5,17 @@ import fnmatch
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Coroutine
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any, Protocol, Self, TypeVar
 
 from pydantic import BaseModel, Field
 
+from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.core.outcome import Outcome, OutcomeKind
+from aaa.core.retry import RetryPolicy, retrying
+from aaa.core.retry import is_transient as default_is_transient
 from aaa.data.blob import BlobStore
 from aaa.events import (
     Event,
@@ -95,7 +98,7 @@ class Ctx:
     async def history(self, from_seq: int = 0) -> list[Event]:
         """The run's events with any claim-checked payloads restored."""
         assert self.run_id
-        raw = await self.engine.store.read(self.run_id, from_seq)
+        raw = await self.engine.retry(lambda: self.engine.store.read(self.run_id, from_seq), "read")
         return [await self.engine.hydrate(e) for e in raw]
 
     async def project(self, projection: Projection[S]) -> S:
@@ -185,6 +188,8 @@ class Engine:
         blobs: BlobStore | None = None,
         claim_threshold: int = 16_384,
         sweep_interval_s: float | None = None,
+        store_retry: RetryPolicy | None = None,
+        is_transient: Callable[[BaseException], bool] | None = None,
     ) -> None:
         self.store: EventStore = store or InMemoryEventStore()
         self.bus = bus or InProcessBus()
@@ -193,6 +198,9 @@ class Engine:
         self.default_budget = default_budget or Budget()
         self.blobs, self.claim_threshold = blobs, claim_threshold
         self.sweep_interval_s = sweep_interval_s
+        # How long to ride out a store outage before asking the bus to redeliver instead.
+        self.store_retry = store_retry or RetryPolicy()
+        self.is_transient = is_transient or default_is_transient
         self._runs: dict[str, _Run] = {}
         self._algos: dict[str, Algorithm] = {}
         self._registered: set[int] = set()
@@ -250,11 +258,24 @@ class Engine:
         run = self._runs.get(run_id)
         return run.trace_id if run else run_id
 
+    async def retry(
+        self,
+        fn: Callable[[], Awaitable[Any]],
+        what: str = "store operation",
+        policy: RetryPolicy | None = None,
+    ) -> Any:
+        """Run a store/blob operation, riding out transient outages per `store_retry` (or `policy`).
+        Raises `StoreUnavailable` if the outage outlasts the budget; other errors pass through."""
+        return await retrying(fn, policy or self.store_retry, classify=self.is_transient, what=what)
+
     async def project(self, projection: Projection[S], run_id: str) -> S:
-        return (await projection.load(self.store, run_id, hydrate=self.hydrate)).state
+        loaded = await self.retry(
+            lambda: projection.load(self.store, run_id, hydrate=self.hydrate), "projection load"
+        )
+        return loaded.state
 
     async def _started_of(self, run_id: str) -> Event:
-        first = await self.store.read(run_id, 0, 1)
+        first = await self.retry(lambda: self.store.read(run_id, 0, 1), "read")
         if not first or first[0].type != RUN_STARTED:
             raise KeyError(f"no run {run_id!r}")
         return await self.hydrate(first[0])
@@ -274,7 +295,8 @@ class Engine:
         """Restore a claim-checked payload (no-op for ordinary events)."""
         if self.blobs is None or event.data.get(CLAIM_KEY) is not True or not event.blobs:
             return event
-        data = json.loads(await self.blobs.get(event.blobs[-1]))
+        blobs = self.blobs
+        data = json.loads(await self.retry(lambda: blobs.get(event.blobs[-1]), "blob read"))
         return event.model_copy(update={"data": data})
 
     # -- wiring -----------------------------------------------------------------------------
@@ -283,7 +305,9 @@ class Engine:
     ) -> None:
         """Subscribe a handler whose returned events are persisted+published by the engine.
         Handlers receive hydrated events. Handler exceptions fail the run (as an event), never
-        the bus. Events for runs that already finished are not delivered to handlers.
+        the bus. A handler that fails because the STORE is unavailable (beyond `store_retry`) is not
+        a failed run: the engine raises `Redeliver` and the bus delivers the event again later.
+        Events for runs that already finished are not delivered to handlers.
 
         `group` names a logical consumer. With a distributed bus, processes subscribing with the
         same group compete (each event is handled by exactly one of them, in order per run);
@@ -296,13 +320,29 @@ class Engine:
                 e = await self.hydrate(e)
                 for f in await handler(e) or ():
                     await self.emit(f)
+            except Redeliver:
+                raise
             except Exception as exc:
+                if self.is_transient(exc):
+                    # The STORE is unavailable (outlasting local retries); the handler is not at fault.
+                    # Never fail the run for that: ask the bus to deliver this event again later.
+                    log.warning(
+                        "store unavailable while handling %s (%s: %s); asking the bus to redeliver",
+                        e.type,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    raise Redeliver(f"{type(exc).__name__}: {exc}") from exc
                 log.exception("handler failed for %s", e.type)
                 if e.run_id:
-                    await self.complete(
-                        e.run_id, OutcomeKind.FAILED, reason=f"{type(exc).__name__}: {exc}"
-                    )
-            return
+                    try:
+                        await self.complete(
+                            e.run_id, OutcomeKind.FAILED, reason=f"{type(exc).__name__}: {exc}"
+                        )
+                    except Exception as exc2:
+                        if self.is_transient(exc2):
+                            raise Redeliver(f"{type(exc2).__name__}: {exc2}") from exc2
+                        log.exception("could not record the failure of run %s", e.run_id)
 
         if self.distributed:
             kw["group"] = group
@@ -350,13 +390,15 @@ class Engine:
         async with self._adopt_locks.setdefault(rid, asyncio.Lock()):
             if run := self._runs.get(rid):
                 return run
-            first = await self.store.read(rid, 0, 1) if rid else []
+            first = await self.retry(lambda: self.store.read(rid, 0, 1), "read") if rid else []
             if not first or first[0].type != RUN_STARTED:
                 return None
             started = await self.hydrate(first[0])
             if algo is not None and started.data.get("algo") != algo.name:
                 return None
-            loaded = await RUNMETA.load(self.store, rid, hydrate=self.hydrate)
+            loaded = await self.retry(
+                lambda: RUNMETA.load(self.store, rid, hydrate=self.hydrate), "projection load"
+            )
             run = _Run(
                 Budget(**started.data.get("budget", {})),
                 asyncio.get_running_loop().create_future(),
@@ -393,8 +435,8 @@ class Engine:
             if stored is not None and stored.seq == run.synced + 1:
                 _apply_meta(run.meta, stored)
                 run.synced = stored.seq
-            elif await self.store.last_seq(rid) > run.synced:
-                for e in await self.store.read(rid, run.synced + 1):
+            elif await self.retry(lambda: self.store.last_seq(rid), "read") > run.synced:
+                for e in await self.retry(lambda: self.store.read(rid, run.synced + 1), "read"):
                     _apply_meta(run.meta, e)
                     run.synced = e.seq
             if run.meta.completed is not None and not run.future.done():
@@ -408,31 +450,54 @@ class Engine:
         if run.done or run.tripped or not (why := run.ledger.exceeded(run.budget)):
             return
         run.tripped = True
-        await self.emit(
-            Event(
-                id=f"{rid}:budget",
-                type="aaa.budget.exceeded",
-                stream=rid,
-                run_id=rid,
-                trace_id=run.trace_id,
-                data={"reason": why},
+        try:
+            await self.emit(
+                Event(
+                    id=f"{rid}:budget",
+                    type="aaa.budget.exceeded",
+                    stream=rid,
+                    run_id=rid,
+                    trace_id=run.trace_id,
+                    data={"reason": why},
+                )
             )
-        )
-        await self.complete(rid, OutcomeKind.BUDGET_EXCEEDED, reason=why)
+            await self.complete(rid, OutcomeKind.BUDGET_EXCEEDED, reason=why)
+        except BaseException:
+            run.tripped = False  # not recorded (store outage): the next sync must try again
+            raise
 
     # -- emit -------------------------------------------------------------------------------
-    async def emit(self, event: Event) -> Event | None:
+    async def emit(self, event: Event, *, retry: RetryPolicy | None = None) -> Event | None:
         """Validate -> claim-check -> append (assign seq) -> account budget -> deliver.
-        Returns the stored event, or None if dropped (duplicate terminal event)."""
+        Returns the stored event, or None if dropped (duplicate terminal event).
+
+        A store outage is ridden out per `retry` (default `store_retry`); if it outlasts that budget
+        `StoreUnavailable` is raised and NOTHING has been recorded or marked done locally."""
         rid = event.run_id or ""
         run = self._runs.get(rid)
+        marked_done = False
         if event.type == RUN_COMPLETED and run is not None:
             if run.done:
                 return None
-            run.done = True  # no await between check and set: atomic under asyncio
-        event = self.schemas.validate(event)
-        stored = (await self.store.append(event.stream, [await self._claim(event)]))[0]
-        if stored.dup:  # already on the log (deterministic id): effect applied once, not twice
+            run.done = marked_done = True  # no await between check and set: atomic under asyncio
+        try:
+            event = self.schemas.validate(event)
+            claimed = await self._claim(event)
+            attempts = 0
+
+            async def append() -> Event:
+                nonlocal attempts
+                attempts += 1
+                return (await self.store.append(claimed.stream, [claimed]))[0]
+
+            stored = await self.retry(append, "append", retry)
+        except BaseException:
+            if marked_done and run is not None:
+                run.done = False  # the completion never reached the log: stay open, retryable
+            raise
+        # A duplicate normally means "already appended AND delivered". After a retry it may mean our
+        # first attempt committed but we never saw the answer, so deliver anyway (repeats are harmless).
+        if stored.dup and attempts == 1:
             if stored.type == RUN_COMPLETED:
                 await self._after_completed(rid, stored)
             return stored
@@ -451,7 +516,7 @@ class Engine:
         run = self._runs.get(rid)
         if run is not None:
             self._mark_done(run, done.data)
-        meta = (await RUNMETA.load(self.store, rid, hydrate=self.hydrate)).state
+        meta = await self.project(RUNMETA, rid)
         for cid in list(meta.children):  # a finished parent leaves no orphan work
             await self.complete(cid, OutcomeKind.CANCELLED, reason="parent run finished")
         try:
@@ -504,18 +569,24 @@ class Engine:
 
     async def _deadline(self, run_id: str, seconds: float, total: float | None = None) -> None:
         await asyncio.sleep(seconds)
-        await self.emit(
-            Event(
-                type="aaa.timer.fired",
-                stream=run_id,
-                run_id=run_id,
-                trace_id=self._trace(run_id),
-                data={"kind": "deadline"},
+        try:
+            await self.emit(
+                Event(
+                    type="aaa.timer.fired",
+                    stream=run_id,
+                    run_id=run_id,
+                    trace_id=self._trace(run_id),
+                    data={"kind": "deadline"},
+                )
             )
-        )
-        await self.complete(
-            run_id, OutcomeKind.TIMEOUT, reason=f"deadline {total or seconds}s exceeded"
-        )
+            await self.complete(
+                run_id, OutcomeKind.TIMEOUT, reason=f"deadline {total or seconds}s exceeded"
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # e.g. the store is down past the retry budget. `sweep()` enforces deadlines too.
+            log.exception("could not enforce the deadline of run %s; sweep() will retry", run_id)
 
     async def _await_completed(self, run_id: str) -> Outcome[Any]:
         async for e in self.store.subscribe(run_id):
@@ -541,7 +612,9 @@ class Engine:
         rid = run_id or new_id()
         if rid in self._runs:
             return RunHandle(self, rid)
-        if await self.store.last_seq(rid) >= 0:  # exists already: finished, or open elsewhere
+        if (
+            await self.retry(lambda: self.store.last_seq(rid), "read") >= 0
+        ):  # exists: finished, or open elsewhere
             await self._adopt(rid, None)
             return RunHandle(self, rid)
         parent_run = self._runs.get(parent) if parent else None
@@ -554,37 +627,44 @@ class Engine:
             tag=tag,
         )
         self._runs[rid] = run
-        if parent:
+        try:
+            if parent:
+                await self.emit(
+                    Event(
+                        id=f"{rid}:childstarted",
+                        type=CHILD_STARTED,
+                        stream=parent,
+                        run_id=parent,
+                        trace_id=run.trace_id,
+                        source="engine",
+                        data={"child_run_id": rid, "tag": tag},
+                    )
+                )
+            if run.budget.deadline_s is not None:
+                run.timer = asyncio.create_task(self._deadline(rid, run.budget.deadline_s))
             await self.emit(
                 Event(
-                    id=f"{rid}:childstarted",
-                    type=CHILD_STARTED,
-                    stream=parent,
-                    run_id=parent,
+                    id=f"{rid}:started",
+                    type=RUN_STARTED,
+                    stream=rid,
+                    run_id=rid,
                     trace_id=run.trace_id,
-                    source="engine",
-                    data={"child_run_id": rid, "tag": tag},
+                    source=algo.name,
+                    data={
+                        "algo": algo.name,
+                        "input": input,
+                        "parent": parent,
+                        "run_tag": tag,
+                        "budget": run.budget.model_dump(),
+                    },
                 )
             )
-        if run.budget.deadline_s is not None:
-            run.timer = asyncio.create_task(self._deadline(rid, run.budget.deadline_s))
-        await self.emit(
-            Event(
-                id=f"{rid}:started",
-                type=RUN_STARTED,
-                stream=rid,
-                run_id=rid,
-                trace_id=run.trace_id,
-                source=algo.name,
-                data={
-                    "algo": algo.name,
-                    "input": input,
-                    "parent": parent,
-                    "run_tag": tag,
-                    "budget": run.budget.model_dump(),
-                },
-            )
-        )
+        except BaseException:
+            # Nothing was durably started: forget it so a retry (same or new run_id) starts cleanly.
+            self._runs.pop(rid, None)
+            if run.timer:
+                run.timer.cancel()
+            raise
         return RunHandle(self, rid)
 
     async def recover(self, algos: list[Algorithm]) -> dict[str, RunHandle]:
