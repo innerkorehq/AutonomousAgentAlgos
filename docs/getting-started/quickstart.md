@@ -10,6 +10,16 @@ the test suite.
 --8<-- "examples/quickstart.py"
 ```
 
+Run it:
+
+```bash
+python examples/quickstart.py
+```
+
+```text
+success - 17 x 23 = 391
+```
+
 What happened, line by line:
 
 1. `@tool` turned a plain function into a tool. The JSON schema the model sees is generated from the type hints and
