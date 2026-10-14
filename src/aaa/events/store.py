@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from aaa.core.errors import ConcurrencyError
-from aaa.events.event import Event
+from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
 
 ANY_SEQ = -2  # expected_seq value meaning "don't check"
@@ -50,6 +50,16 @@ class EventStore(Protocol):
         """Every run's started event and (if any) completed event, for crash recovery."""
         ...
 
+    async def scrub(self, stream: str) -> int:
+        """Erase every event's payload in `stream` (see `aaa.events.event.scrubbed`), keep the
+        envelope, and drop the stream's snapshots and any bus copies of its events. Idempotent;
+        returns the number of events in the stream. Only meaningful for finished runs."""
+        ...
+
+    async def delete_stream(self, stream: str) -> int:
+        """Remove `stream` entirely (events, snapshots, bus copies). Returns events removed."""
+        ...
+
     async def aclose(self) -> None:
         """Release connections/files. A no-op for the in-memory store."""
         ...
@@ -73,6 +83,27 @@ class InMemoryEventStore:
 
     async def aclose(self) -> None:
         return None
+
+    async def scrub(self, stream: str) -> int:
+        async with self._cond:
+            log = self._streams.get(stream, [])
+            for i, e in enumerate(log):
+                log[i] = self._ids[stream][e.id] = scrubbed(e)
+            for key in [k for k in self._snaps if k[0] == stream]:
+                del self._snaps[key]
+            if self.outbox is not None:
+                self.outbox.forget(stream)
+            return len(log)
+
+    async def delete_stream(self, stream: str) -> int:
+        async with self._cond:
+            n = len(self._streams.pop(stream, []))
+            self._ids.pop(stream, None)
+            for key in [k for k in self._snaps if k[0] == stream]:
+                del self._snaps[key]
+            if self.outbox is not None:
+                self.outbox.forget(stream)
+            return n
 
     async def last_seq(self, stream: str) -> int:
         return len(self._streams[stream]) - 1

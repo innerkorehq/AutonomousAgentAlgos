@@ -2,6 +2,13 @@
 
 ## 0.0.1 (unreleased)
 
+**Privacy: tenancy, redaction, retention** (see [the guide](../guides/privacy.md))
+
+- `Event.tenant`, inherited by every derived event; `engine.tenant(name)` scopes that namespace run ids and check ownership on every lookup; `Engine(require_tenant=True)`.
+- `Engine(redactor=...)` with `PatternRedactor` (e-mail, Luhn-checked cards, SSN, API keys, JWT, bearer), `KeyRedactor` and `standard_redactor()`: applied before persistence and delivery.
+- `engine.erase` (scrub or delete), `engine.purge` and `Engine(retention=[RetentionPolicy(...)])` applied by `sweep()`. `EventStore` gained `scrub` and `delete_stream` (all four backends), which also remove
+  snapshots and the bus outbox copies. Claim-checked blobs are now namespaced per stream so erasing one run cannot affect another.
+
 **Quality gates**
 
 - CI: ruff, `pyright` (0 errors over the library, examples and scripts) and the full suite on Python 3.11 and 3.12 against real Postgres and Redis.

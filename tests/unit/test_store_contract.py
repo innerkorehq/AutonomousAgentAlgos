@@ -173,3 +173,95 @@ async def test_has_is_an_exact_per_stream_id_lookup(store):
         and not await store.has("h2", "a")
         and not await store.has("nope", "a")
     )
+
+
+# -- erasure ------------------------------------------------------------------------------------
+def _ev(i, stream, **kw):
+    return Event(
+        id=f"{stream}-{i}",
+        type=kw.pop("type", "x.event"),
+        stream=stream,
+        run_id=stream,
+        tenant="acme",
+        subject="someone@example.com",
+        data={"secret": f"payload-{i}", "n": i},
+        meta={"label": "pii"},
+        **kw,
+    )
+
+
+async def _seed(store, stream):
+    await store.append(
+        stream,
+        [
+            _ev(0, stream, type="aaa.run.started").model_copy(
+                update={"data": {"algo": "a", "input": {"ssn": "123"}, "parent": None}}
+            ),
+            _ev(1, stream),
+            _ev(2, stream, type="aaa.run.completed").model_copy(
+                update={"data": {"kind": "success", "value": {"pii": "x"}, "reason": None}}
+            ),
+        ],
+    )
+
+
+async def test_scrub_erases_payloads_keeps_the_skeleton_and_is_idempotent(store):
+    await _seed(store, "gone")
+    await _seed(store, "kept")
+    await store.save_snapshot(
+        StoredSnapshot(stream="gone", name="n", seq=1, version=1, state='{"pii": 1}')
+    )
+    assert await store.scrub("gone") == 3
+    assert await store.scrub("gone") == 3  # idempotent
+    after = await store.read("gone")
+    assert [e.id for e in after] == ["gone-0", "gone-1", "gone-2"]
+    assert [e.seq for e in after] == [0, 1, 2]
+    assert [e.type for e in after] == ["aaa.run.started", "x.event", "aaa.run.completed"]
+    assert all(e.tenant == "acme" and e.run_id == "gone" for e in after)
+    assert all(e.data.get("$erased") is True and e.meta == {} and e.subject is None for e in after)
+    assert "ssn" not in str(after) and "payload" not in str(after) and "pii" not in str(after)
+    assert after[0].data["algo"] == "a" and after[2].data["kind"] == "success"
+    assert await store.load_snapshot("gone", "n") is None
+    kept = await store.read("kept")  # other streams are untouched
+    assert kept[1].data == {"secret": "payload-1", "n": 1} and kept[1].subject
+    # structure queries still work on the scrubbed run, and it is still a finished run
+    info = {r.stream: r for r in await store.run_index()}["gone"]
+    assert info.started.data["algo"] == "a" and info.completed is not None
+    assert await store.has("gone", "gone-1")
+    more = await store.append("gone", [Event(id="gone-3", type="aaa.run.erased")])
+    assert more[0].seq == 3  # the stream stays appendable (the erasure marker goes here)
+
+
+async def test_delete_stream_removes_everything_and_the_id_can_be_reused(store):
+    await _seed(store, "doomed")
+    await _seed(store, "other")
+    await store.save_snapshot(
+        StoredSnapshot(stream="doomed", name="n", seq=1, version=1, state="{}")
+    )
+    assert await store.delete_stream("doomed") == 3
+    assert await store.read("doomed") == [] and await store.last_seq("doomed") == -1
+    assert not await store.has("doomed", "doomed-1")
+    assert await store.load_snapshot("doomed", "n") is None
+    assert {r.stream for r in await store.run_index()} == {"other"}
+    assert len(await store.read("other")) == 3
+    again = await store.append("doomed", [Event(id="fresh", type="x.event")], expected_seq=-1)
+    assert again[0].seq == 0 and not again[0].dup
+
+
+async def test_erasure_also_drops_the_bus_copies_of_the_events(store):
+    """The transactional outbox holds a second copy of every event until it is trimmed."""
+    if not hasattr(store, "bus_backend"):
+        pytest.skip("this store has no outbox")
+    from aaa.events import partition_of
+
+    await _seed(store, "leaky")
+    backend = store.bus_backend()
+    p = partition_of("leaky", store.partitions)
+
+    async def copies():
+        entries = await backend.read(p, 0, 100, 0)
+        return [e for _id, e in entries if e.stream == "leaky" and "payload" in str(e.data)]
+
+    assert await copies()  # the outbox really holds the payloads
+    await store.scrub("leaky")
+    assert not await copies()

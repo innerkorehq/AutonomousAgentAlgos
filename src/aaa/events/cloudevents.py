@@ -14,6 +14,7 @@ from aaa.events.event import BlobRef, Event
 _EXT = {
     "stream": "stream",
     "run_id": "runid",
+    "tenant": "tenant",
     "trace_id": "traceid",
     "span_id": "spanid",
     "causation_id": "causationid",

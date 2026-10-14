@@ -9,7 +9,7 @@ document) exceeds a threshold, AAA moves it to a **blob store** and leaves a poi
 
 ```text
 got 60000 chars
-stored event keys: ['$claim', 'call_id', 'name'] | blob: 60079 bytes
+stored event keys: ['$claim', 'call_id', 'name'] | blob: 60126 bytes
 hydrated result length: 60000
 ```
 
@@ -31,8 +31,9 @@ Without `blobs=`, nothing is claim-checked and large payloads stay in events.
 - The event keeps its envelope, a `"$claim": true` marker, and a few small **hot fields** (`usage`, `cost`, `tag`, `call_id`,
   `name`) so spend accounting and correlation never need to fetch the blob. The full `data` JSON is in the blob, referenced by `event.blobs[-1]`.
 - `aaa.run.completed` is **never** claim-checked, so outcomes are always readable directly.
-- Blobs are **content-addressed (SHA-256)**: identical payloads are stored once, and every read verifies the hash
-  (`BlobIntegrityError` on tampering or corruption).
+- Blobs are **content-addressed (SHA-256)** and every read verifies the hash (`BlobIntegrityError` on tampering or
+  corruption). The engine namespaces each payload by its stream before storing it, so identical payloads in two runs are two
+  different blobs: that is what lets [erasing one run](privacy.md#erasure) remove its blobs without touching anyone else's.
 
 ## Reading
 
@@ -54,7 +55,7 @@ full = await engine.hydrate(event)  # no-op for ordinary events
 
 - **A blob must be reachable from every worker that may read the event.** In a cluster use shared storage (NFS, S3-style).
   With a non-shared store, an event written on worker A cannot be hydrated on B.
-- **Blobs are never garbage-collected** by AAA. Because they are content-addressed, deleting is safe only when no event
-  references them; manage retention at the storage layer (lifecycle rules) alongside event retention.
+- **Blobs of erased runs are deleted** by [`engine.erase`](privacy.md#erasure) and retention policies. Orphans from other causes
+  (a crash between writing a blob and appending its event) are not garbage-collected; use your storage layer's lifecycle rules.
 - **Blobs are not encrypted** by AAA. Use an encrypted volume or bucket for sensitive data. See [Security](../operations/security.md).
 - Projections read *hydrated* events, so folding over claim-checked events fetches their blobs (snapshots keep that to the tail since the last snapshot). Spend accounting needs only the hot fields and never fetches a blob.

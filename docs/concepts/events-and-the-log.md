@@ -14,6 +14,7 @@ immutable (frozen Pydantic model).
 | `time` | UTC timestamp. |
 | `stream` | The ordering and concurrency boundary. For runs this is the run id. |
 | `run_id`, `trace_id`, `span_id` | Which run, and the trace the run belongs to (children share their root's `trace_id`). |
+| `tenant` | Owner of the run, stamped at start and inherited by every derived event. See [Tenancy](../guides/privacy.md#tenancy). |
 | `causation_id`, `correlation_id` | The event that directly caused this one; the first event of the chain. |
 | `seq` | 0-based position in the stream, assigned by the store on append. |
 | `schema_ref` | Optional `name/vN` payload schema for [versioned validation and upcasting](#schemas-and-versions). |

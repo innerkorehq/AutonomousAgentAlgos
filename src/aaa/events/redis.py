@@ -22,7 +22,7 @@ import redis.asyncio as aioredis
 
 from aaa.core.errors import ConcurrencyError
 from aaa.events.distributed import partition_of
-from aaa.events.event import Event
+from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
 from aaa.events.store import ANY_SEQ, RunInfo
 
@@ -229,6 +229,44 @@ class RedisEventStore:
             snap.seq,
             json.dumps({"seq": snap.seq, "version": snap.version, "state": snap.state}),
         )
+
+    async def _erase(self, stream: str, delete: bool) -> int:
+        p = partition_of(stream, self.partitions)
+        key = self._k(p, "ev", stream)
+        rows = await self.r.xrange(key, "-", "+")
+        started_key, done_key = self._k(p, "started"), self._k(p, "done")
+        async with self.r.pipeline(transaction=True) as pipe:
+            pipe.delete(key)
+            if delete:
+                pipe.delete(self._k(p, "ids", stream))
+                pipe.hdel(started_key, stream)
+                pipe.hdel(done_key, stream)
+            else:
+                for entry_id, f in rows:
+                    seq = int(_s(entry_id).split("-")[0]) - 1
+                    s = scrubbed(self._event(seq, f[b"body"]))
+                    body = s.model_dump_json()
+                    pipe.xadd(key, {"id": s.id, "body": body}, id=_s(entry_id))
+                    if s.type == "aaa.run.started":
+                        pipe.hset(started_key, stream, f"{seq}:{body}")
+                    elif s.type == "aaa.run.completed":
+                        pipe.hset(done_key, stream, f"{seq}:{body}")
+            pipe.delete(self._snap_key(stream))
+            await pipe.execute()
+        # bus copies (a bounded, transient outbox) carry the payloads too: drop this stream's
+        gone: list[Any] = []
+        for entry_id, f in await self.r.xrange(self._k(p, "bus"), "-", "+"):
+            if json.loads(f[b"body"]).get("stream") == stream:
+                gone.append(entry_id)
+        if gone:
+            await self.r.xdel(self._k(p, "bus"), *gone)
+        return len(rows)
+
+    async def scrub(self, stream: str) -> int:
+        return await self._erase(stream, False)
+
+    async def delete_stream(self, stream: str) -> int:
+        return await self._erase(stream, True)
 
     async def trim_outbox(self, keep_last: int = 100_000) -> int:
         """Trim each partition's bus stream to roughly the newest `keep_last` entries."""

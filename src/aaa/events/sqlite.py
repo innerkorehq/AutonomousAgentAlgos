@@ -9,7 +9,7 @@ from typing import Any
 
 from aaa.core.aio import wait_for
 from aaa.core.errors import ConcurrencyError
-from aaa.events.event import Event
+from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
 from aaa.events.store import ANY_SEQ, RUN_COMPLETED, RUN_STARTED, RunInfo
 
@@ -190,6 +190,32 @@ class SQLiteEventStore:
                 (snap.stream, snap.name, snap.seq, snap.version, snap.state),
             )
         )
+
+    def _scrub(self, stream: str, delete: bool) -> int:
+        c = self._conn
+        c.execute("BEGIN IMMEDIATE")
+        try:
+            rows = c.execute("SELECT seq, body FROM events WHERE stream=?", (stream,)).fetchall()
+            if delete:
+                c.execute("DELETE FROM events WHERE stream=?", (stream,))
+            else:
+                for seq, body in rows:
+                    c.execute(
+                        "UPDATE events SET body=? WHERE stream=? AND seq=?",
+                        (scrubbed(self._parse(seq, body)).model_dump_json(), stream, seq),
+                    )
+            c.execute("DELETE FROM snapshots WHERE stream=?", (stream,))
+            c.execute("COMMIT")
+            return len(rows)
+        except BaseException:
+            c.execute("ROLLBACK")
+            raise
+
+    async def scrub(self, stream: str) -> int:
+        return await self._run(self._scrub, stream, False)
+
+    async def delete_stream(self, stream: str) -> int:
+        return await self._run(self._scrub, stream, True)
 
     async def aclose(self) -> None:
         await asyncio.get_running_loop().run_in_executor(self._pool, self._conn.close)

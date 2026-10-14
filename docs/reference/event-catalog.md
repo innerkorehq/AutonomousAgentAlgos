@@ -13,6 +13,7 @@ the `data` payload. `aaa.*` is reserved; your own events should use your own pre
 |---|---|---|---|
 | `aaa.run.started` | `algo`, `input`, `parent`, `run_tag`, `budget` | `Engine.start` | id `<run>:started`; first event of every run. |
 | `aaa.run.completed` | `kind`, `value`, `reason` | algorithm (`finish`) or `Engine.complete` | id `<run>:completed`; **exactly one per run**; never claim-checked. |
+| `aaa.run.erased` | `reason`, `events`, `blobs` | `engine.erase` / retention | id `<run>:erased`; appended after a run is scrubbed; written straight to the log, not delivered. See [Erasure](../guides/privacy.md#erasure). |
 | `aaa.run.cancel` | `reason` | `RunHandle.cancel` | The engine turns it into `run.completed` (`cancelled`). |
 | `aaa.budget.exceeded` | `reason` | `Engine` | Followed by `run.completed` (`budget_exceeded`). |
 | `aaa.timer.fired` | `kind: "deadline"` | `Engine` | Followed by `run.completed` (`timeout`). |

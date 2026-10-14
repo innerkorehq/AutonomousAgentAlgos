@@ -42,6 +42,7 @@ class RecoveryReport:
     orphans_cancelled: list[str] = field(default_factory=list)
     timed_out: list[str] = field(default_factory=list)
     announced: list[str] = field(default_factory=list)
+    erased: list[str] = field(default_factory=list)
     redelivered: int = 0
 
 
@@ -82,6 +83,8 @@ async def maintain(engine: Engine) -> RecoveryReport:
                 )
             )
             report.announced.append(r.stream)
+    if engine.retention:  # data-retention policies ride along with the cluster maintenance
+        report.erased = (await engine.apply_retention()).streams
     return report
 
 

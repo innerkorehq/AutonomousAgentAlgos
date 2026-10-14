@@ -64,6 +64,15 @@ EXPECTED = {
         "POST http://kong:8000/chat",
         "custom provider registered",
     ],
+    "privacy_tenancy.py": [
+        "answer: found C-7: [REDACTED:email], card [REDACTED:card]",
+        "stored e-mail visible: False",
+        "acme asking for globex's run: \"no run 'globex/ticket-1'\"",
+        "erased 9 events; last event: aaa.run.erased",
+        "payload left: False",
+        "still finished: True",
+        "globex untouched: True",
+    ],
     "ensembles.py": [
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",

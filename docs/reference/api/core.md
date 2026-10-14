@@ -20,6 +20,10 @@
 
 ::: aaa.core.SchemaError
 
+::: aaa.core.RunNotFinished
+
+::: aaa.core.TenantMismatch
+
 ## Resilience
 
 ::: aaa.core.RetryPolicy

@@ -83,7 +83,7 @@ raise `StoreUnavailable` to the caller after the budget so your API can answer 5
 | Gap | Notes |
 |---|---|
 | **Observability integration** | No OpenTelemetry spans or metrics yet. The event log carries trace/causation ids; an exporter is straightforward but unwritten. |
-| **Tenancy, redaction, retention** | `Event.meta` can hold a tenant tag but nothing enforces isolation; no PII scrubbing hook; no automated erasure/retention. See [Security](../operations/security.md). |
+| **Hard tenant isolation, encryption** | Tenancy is application-level (shared store; run ids namespaced and ownership-checked). Redaction is pattern-based. Nothing is encrypted by AAA, and erasure does not reach your backups. See [Tenancy, redaction, retention](../guides/privacy.md). |
 | **`Item`/`Codec` consumed natively by the built-in algorithms** | Today they are the rendering layer for your own tools/algorithms; built-ins take plain dict input. See [Data model](../concepts/data-model.md). |
 | **Classical planning algorithms** | HTN, A\*/heuristic search over a user-defined domain, PDDL/CP-SAT/MILP solver adapters, MCTS. Deliberately deferred; the data contract for them was designed but not implemented. |
 | **Vector database and S3 adapters** | `Index` and `BlobStore` are protocols; only in-memory (and file blobs) ship. |

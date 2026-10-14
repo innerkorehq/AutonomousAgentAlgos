@@ -77,11 +77,11 @@ Clusters do not call `recover()`: the distributed bus redelivers by itself. See 
 
 ## Growth and retention
 
-- **Nothing is deleted automatically.** The log is append-only; completed runs stay. Plan retention for your volume:
-  archive or delete finished streams with SQL on your own schedule (a finished run's stream is self-contained).
+- **Nothing is deleted unless you configure it.** The log is append-only; completed runs stay until you erase them with
+  [`engine.erase`/`purge` or retention policies](privacy.md#retention), which also remove snapshots, blobs and outbox copies.
 - For the distributed bus, trim the **outbox** periodically (`store.trim_outbox(keep_last=...)`; see
   [Running a cluster](clusters.md#maintenance)).
-- Blob stores are content-addressed and never garbage-collected by AAA; see [Large payloads](large-payloads.md).
+- Blobs of erased runs are deleted with them; see [Large payloads](large-payloads.md).
 - Long conversations are linear in size ([Performance](../operations/performance.md#long-conversations)).
 
 ## Exporting events

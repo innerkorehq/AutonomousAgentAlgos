@@ -33,7 +33,7 @@ from aaa.core.aio import raise_if_cancelling, wait_event
 from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.events.bus import DeliverySlot, Handler, current_delivery
-from aaa.events.event import Event
+from aaa.events.event import Event, scrubbed
 from aaa.events.guard import ExecutionGuard, LeaseGuard
 
 log = logging.getLogger("aaa.dbus")
@@ -108,6 +108,11 @@ class MemoryBusBackend:
         if len(self._log[partition]) <= after and wait_s > 0:
             await wait_event(self._wakeup(partition), wait_s)
         return self._log[partition][after : after + limit]
+
+    def forget(self, stream: str) -> None:
+        """Erase the payload of this stream's queued entries (positions are ids, so entries stay)."""
+        p = partition_of(stream, self.partitions)
+        self._log[p] = [(i, scrubbed(e) if e.stream == stream else e) for i, e in self._log[p]]
 
     async def tail(self, partition: int) -> int:
         return len(self._log[partition])

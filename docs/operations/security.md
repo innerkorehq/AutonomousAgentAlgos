@@ -10,9 +10,11 @@ personal data, an API response or a secret passes through a tool, it is in the l
 
 - Treat the event store and blob store as **sensitive data stores**: encryption at rest, network isolation, least-privilege
   credentials, backups protected like the data.
-- There is **no built-in redaction hook** yet. Scrub in your tools before returning data to the agent, or filter at the store layer.
-- Retention is yours: nothing is deleted automatically (see [Persistence](../guides/persistence.md#growth-and-retention)).
-  Right-to-erasure is not automated.
+- `Engine(redactor=...)` scrubs events **before** they are persisted or delivered ([Redaction](../guides/privacy.md#redaction)).
+  It is a pattern-based safety net, not a guarantee; keep sensitive data out of events where you can.
+- [`engine.erase`, `purge` and retention policies](../guides/privacy.md#erasure) remove finished runs (payloads, snapshots, blobs, outbox
+  copies). Nothing is deleted unless you configure it. They do not reach your own backups or logs.
+- Blobs and the event store are **not encrypted** by AAA; use encryption at rest.
 
 ## Secrets
 
@@ -52,8 +54,9 @@ AAA does not authenticate the appender. Therefore:
 
 ## Multi-tenancy
 
-There is no enforced tenant isolation inside one event store. `Event.meta` can carry a tenant tag, but nothing checks it.
-For hard isolation use **separate databases** (Postgres), **separate key prefixes or instances** (Redis `prefix=`), and separate
+Events carry a `tenant`, and [`engine.tenant(name)`](../guides/privacy.md#tenancy) gives a scope that namespaces run ids and
+checks ownership on every lookup, so one customer's code cannot read or erase another's runs through it. That is *application-level*
+isolation: all tenants still share one store and the scope trusts the tenant name you pass. For hard isolation use **separate databases** (Postgres), **separate key prefixes or instances** (Redis `prefix=`), and separate
 blob roots per tenant, and give each tenant's workers only their own credentials.
 
 ## Network and gateways

@@ -5,8 +5,9 @@ import fnmatch
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Any, Protocol, Self, TypeVar
 
 from pydantic import BaseModel, Field
@@ -28,7 +29,10 @@ from aaa.events import (
     Projection,
     SchemaRegistry,
 )
+from aaa.privacy import Redactor
 from aaa.runtime.budget import Budget, Ledger
+from aaa.runtime.retention import ErasureReport, PurgeReport, RetentionPolicy
+from aaa.runtime.tenancy import TenantScope, valid_tenant
 
 log = logging.getLogger("aaa.engine")
 S = TypeVar("S")
@@ -76,6 +80,7 @@ class _Run:
     algo: Any = None
     parent: str | None = None
     tag: str | None = None
+    tenant: str | None = None
     meta: RunMeta = field(default_factory=RunMeta)
     synced: int = -1  # last event seq folded into `meta`
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -194,6 +199,9 @@ class Engine:
         sweep_interval_s: float | None = None,
         store_retry: RetryPolicy | None = None,
         is_transient: Callable[[BaseException], bool] | None = None,
+        redactor: Redactor | None = None,
+        require_tenant: bool = False,
+        retention: Sequence[RetentionPolicy] = (),
     ) -> None:
         self.store: EventStore = store or InMemoryEventStore()
         self.bus = bus or InProcessBus()
@@ -205,6 +213,15 @@ class Engine:
         # How long to ride out a store outage before asking the bus to redeliver instead.
         self.store_retry = store_retry or RetryPolicy()
         self.is_transient = is_transient or default_is_transient
+        # Privacy: `redactor` scrubs every event before it is persisted or delivered; `require_tenant`
+        # refuses runs that carry no tenant; `retention` is applied by `sweep()`.
+        self.redactor, self.require_tenant, self.retention = (
+            redactor,
+            require_tenant,
+            tuple(retention),
+        )
+        self._tenants: dict[str, str | None] = {}  # run id -> tenant, for runs not hosted here
+        self._retention_seen: dict[int, float] = {}
         self._runs: dict[str, _Run] = {}
         self._algos: dict[str, Algorithm] = {}
         self._registered: set[int] = set()
@@ -254,6 +271,57 @@ class Engine:
         t.add_done_callback(self._tasks.discard)
         return t
 
+    async def _tenant_of(self, run_id: str) -> str | None:
+        run = self._runs.get(run_id)
+        if run is not None:
+            return run.tenant
+        if run_id in self._tenants:
+            return self._tenants[run_id]
+        first = await self.retry(lambda: self.store.read(run_id, 0, 1), "read")
+        if not first:
+            return None  # not started (yet): do not cache a miss
+        self._tenants[run_id] = first[0].tenant
+        return first[0].tenant
+
+    def _forget(self, run_id: str) -> None:
+        run = self._runs.pop(run_id, None)
+        if run and run.timer:
+            run.timer.cancel()
+        self._tenants.pop(run_id, None)
+
+    # -- tenancy, erasure, retention (see aaa.runtime.tenancy / aaa.runtime.retention) -------
+    def tenant(self, name: str) -> TenantScope:
+        """A view of this engine bound to one tenant: namespaced run ids, ownership-checked lookups."""
+        return TenantScope(self, name)
+
+    async def erase(
+        self, run_id: str, *, delete: bool = False, reason: str = "erasure", force: bool = False
+    ) -> ErasureReport:
+        """Erase a finished run: scrub its payloads (keeping the audit skeleton) or, with
+        `delete=True`, remove it. Also removes its snapshots, blobs and bus copies."""
+        from aaa.runtime.retention import erase_run
+
+        return await erase_run(self, run_id, delete=delete, reason=reason, force=force)
+
+    async def purge(
+        self,
+        *,
+        older_than: timedelta,
+        tenant: str | None = None,
+        delete: bool = False,
+        reason: str = "retention",
+    ) -> PurgeReport:
+        """Erase every finished run (of `tenant`, if given) that completed more than `older_than` ago."""
+        from aaa.runtime.retention import purge
+
+        return await purge(self, older_than=older_than, tenant=tenant, delete=delete, reason=reason)
+
+    async def apply_retention(self) -> PurgeReport:
+        """Evaluate the configured `retention` policies now (each is rate-limited by its `interval_s`)."""
+        from aaa.runtime.retention import apply_retention
+
+        return await apply_retention(self, self.retention)
+
     def handle(self, run_id: str) -> RunHandle:
         """A handle to any run by id (started here, in another process, or before a restart)."""
         return RunHandle(self, run_id)
@@ -291,6 +359,9 @@ class Engine:
         raw = json.dumps(event.data, default=str).encode()
         if len(raw) <= self.claim_threshold:
             return event
+        # The payload is namespaced by its stream so identical payloads of two runs (or tenants) are
+        # different blobs: erasing one run can never remove, or reveal the existence of, another's.
+        raw = json.dumps({"$ns": event.stream, "data": event.data}, default=str).encode()
         ref = await self.blobs.put(raw, "application/json")
         stub = {CLAIM_KEY: True, **{k: event.data[k] for k in CLAIM_KEEP if k in event.data}}
         return event.model_copy(update={"data": stub, "blobs": (*event.blobs, ref)})
@@ -301,6 +372,8 @@ class Engine:
             return event
         blobs = self.blobs
         data = json.loads(await self.retry(lambda: blobs.get(event.blobs[-1]), "blob read"))
+        if isinstance(data, dict) and data.keys() == {"$ns", "data"}:
+            data = data["data"]
         return event.model_copy(update={"data": data})
 
     # -- wiring -----------------------------------------------------------------------------
@@ -410,6 +483,7 @@ class Engine:
                 algo=algo,
                 parent=started.data.get("parent"),
                 tag=started.data.get("run_tag"),
+                tenant=started.tenant,
                 meta=loaded.state,
                 synced=loaded.seq,
             )
@@ -485,7 +559,12 @@ class Engine:
                 return None
             run.done = marked_done = True  # no await between check and set: atomic under asyncio
         try:
+            tenant = await self._tenant_of(rid) if event.tenant is None and rid else None
+            if tenant is not None:
+                event = event.model_copy(update={"tenant": tenant})
             event = self.schemas.validate(event)
+            if self.redactor is not None:
+                event = self.redactor.redact(event)
             claimed = await self._claim(event)
             attempts = 0
 
@@ -633,11 +712,15 @@ class Engine:
         run_id: str | None = None,
         parent: str | None = None,
         tag: str | None = None,
+        tenant: str | None = None,
     ) -> RunHandle:
         """Start a run (idempotent for a given `run_id`). With `parent`, the child's spend rolls
         up into the parent's budget, its completion is announced on the parent stream, and it is
-        cancelled if the parent finishes first."""
+        cancelled if the parent finishes first. `tenant` tags the run and everything derived from it
+        (children inherit their parent's); see `Engine.tenant()` for the safe, namespaced way."""
         self.register(algo)
+        if tenant is not None:
+            valid_tenant(tenant)
         rid = run_id or new_id()
         if rid in self._runs:
             return RunHandle(self, rid)
@@ -647,6 +730,10 @@ class Engine:
             await self._adopt(rid, None)
             return RunHandle(self, rid)
         parent_run = self._runs.get(parent) if parent else None
+        if tenant is None and parent:
+            tenant = parent_run.tenant if parent_run else await self._tenant_of(parent)
+        if tenant is None and self.require_tenant:
+            raise ValueError("this engine requires a tenant: use engine.tenant(name).start(...)")
         run = _Run(
             budget or self.default_budget,
             asyncio.get_running_loop().create_future(),
@@ -654,6 +741,7 @@ class Engine:
             algo=algo,
             parent=parent,
             tag=tag,
+            tenant=tenant,
         )
         self._runs[rid] = run
         try:
@@ -664,6 +752,7 @@ class Engine:
                         type=CHILD_STARTED,
                         stream=parent,
                         run_id=parent,
+                        tenant=tenant,
                         trace_id=run.trace_id,
                         source="engine",
                         data={"child_run_id": rid, "tag": tag},
@@ -677,6 +766,7 @@ class Engine:
                     type=RUN_STARTED,
                     stream=rid,
                     run_id=rid,
+                    tenant=tenant,
                     trace_id=run.trace_id,
                     source=algo.name,
                     data={

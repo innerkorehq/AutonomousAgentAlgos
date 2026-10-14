@@ -19,6 +19,15 @@ class BlobRef(BaseModel):
     media_type: str = "application/octet-stream"
 
 
+ERASED = "$erased"
+# Structural fields that survive erasure: enough to keep the causal skeleton and let a restart or
+# `sweep()` reason about a finished run, but never user payload.
+_KEEP_ON_ERASE: dict[str, tuple[str, ...]] = {
+    "aaa.run.started": ("algo", "parent", "run_tag", "budget"),
+    "aaa.run.completed": ("kind",),
+}
+
+
 class Event(BaseModel):
     """Immutable, CloudEvents-compatible envelope. The event log is the source of truth."""
 
@@ -31,6 +40,7 @@ class Event(BaseModel):
     time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     stream: str = "default"  # ordering + OCC boundary (usually the run id)
     run_id: str | None = None
+    tenant: str | None = None  # owner of the run; inherited by every derived event
     trace_id: str | None = None
     span_id: str | None = None
     causation_id: str | None = None
@@ -49,6 +59,7 @@ class Event(BaseModel):
         base: dict[str, Any] = {
             "stream": self.stream,
             "run_id": self.run_id,
+            "tenant": self.tenant,
             "trace_id": self.trace_id,
             "correlation_id": self.correlation_id or self.id,
             "causation_id": self.id,
@@ -59,3 +70,12 @@ class Event(BaseModel):
         if "id" not in base:  # deterministic: same parent + type + content => same id
             base["id"] = stable_id(self.id, type, json.dumps(payload, sort_keys=True, default=str))
         return Event(type=type, data=payload, **base)
+
+
+def scrubbed(e: Event) -> Event:
+    """The event with its payload erased: id, type, stream, seq, time, causal ids and tenant stay
+    (the audit skeleton); `data`, blobs, `meta` and `subject` are gone. Idempotent."""
+    keep = {k: e.data[k] for k in _KEEP_ON_ERASE.get(e.type, ()) if k in e.data}
+    return e.model_copy(
+        update={"data": {ERASED: True, **keep}, "blobs": (), "meta": {}, "subject": None}
+    )

@@ -24,7 +24,7 @@ import asyncpg
 from aaa.core.aio import wait_event
 from aaa.core.errors import ConcurrencyError
 from aaa.events.distributed import partition_of
-from aaa.events.event import Event
+from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
 from aaa.events.store import ANY_SEQ, RUN_COMPLETED, RUN_STARTED, RunInfo
 
@@ -231,6 +231,37 @@ class PostgresEventStore:
             )
             for r in started
         ]
+
+    # -- erasure ----------------------------------------------------------------------------
+    async def _erase(self, stream: str, delete: bool) -> int:
+        p = partition_of(stream, self.partitions)
+        async with self.pool.acquire() as c, c.transaction():
+            await c.execute("SELECT 1 FROM aaa_partitions WHERE partition=$1 FOR UPDATE", p)
+            rows = await c.fetch("SELECT seq, body FROM aaa_events WHERE stream=$1", stream)
+            if delete:
+                await c.execute("DELETE FROM aaa_events WHERE stream=$1", stream)
+            else:
+                for r in rows:
+                    await c.execute(
+                        "UPDATE aaa_events SET body=$3 WHERE stream=$1 AND seq=$2",
+                        stream,
+                        r["seq"],
+                        scrubbed(self._event(r["seq"], r["body"])).model_dump_json(),
+                    )
+            # bus copies of the events (a bounded, transient outbox): the payloads must go too
+            await c.execute(
+                "DELETE FROM aaa_outbox WHERE partition=$1 AND (body::jsonb)->>'stream' = $2",
+                p,
+                stream,
+            )
+            await c.execute("DELETE FROM aaa_snapshots WHERE stream=$1", stream)
+            return len(rows)
+
+    async def scrub(self, stream: str) -> int:
+        return await self._erase(stream, False)
+
+    async def delete_stream(self, stream: str) -> int:
+        return await self._erase(stream, True)
 
     # -- snapshots --------------------------------------------------------------------------
     async def load_snapshot(self, stream: str, name: str) -> StoredSnapshot | None:

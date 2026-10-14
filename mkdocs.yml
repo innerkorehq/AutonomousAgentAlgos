@@ -95,6 +95,7 @@ nav:
       - Running a cluster: guides/clusters.md
       - The tool execution guard: guides/tool-guard.md
       - Large payloads: guides/large-payloads.md
+      - Tenancy, redaction, retention: guides/privacy.md
       - Testing your agents: guides/testing.md
       - Extending AAA: guides/extending.md
   - Operations:

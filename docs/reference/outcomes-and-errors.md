@@ -44,6 +44,8 @@ failure) and `ToolArgsError(ToolError)` (raised by `Tool.invoke` for bad argumen
 | `aaa.core.AAAError` | Base class of all library errors. |
 | `aaa.core.ConcurrencyError` | `EventStore.append(expected_seq=...)` mismatch. |
 | `aaa.core.SchemaError` | Unknown/invalid/un-migratable event payload schema. |
+| `aaa.core.RunNotFinished` | `engine.erase` on a run that is still open (pass `force=True`). |
+| `aaa.core.TenantMismatch` | Chained cause of the `KeyError` a `TenantScope` raises for another tenant's run (reported as a missing run). |
 | `aaa.data.MissingCapability` | `preflight()` when a required capability is absent. |
 | `aaa.data.BlobIntegrityError` | A blob's content hash does not match its reference. |
 | `ValueError` | Invalid configuration: bad `GuardConfig` combos, duplicate algorithm names, wrong partition count, cyclic `WorkflowGraph`. |
