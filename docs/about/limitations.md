@@ -90,7 +90,7 @@ raise `StoreUnavailable` to the caller after the budget so your API can answer 5
 | **Memory backends verified live** | The Mem0, Graphiti, Supermemory and LangGraph adapters pass a shared contract against stand-ins, and their calls are checked against the real libraries' signatures in CI, but none has been run against a live service. `NativeMemory` is in-process and keyword-only unless given an embedder. See [Long-term memory](../guides/memory.md#what-is-and-is-not-verified). |
 | **Vector database and S3 adapters** | `Index` and `BlobStore` are protocols; only in-memory (and file blobs) ship. |
 | **Prompt-caching and summarization helpers** | The remaining cost driver in long conversations. |
-| **PyPI release, versioned docs** | Docs are published automatically and the test suite runs in CI; the package is not on PyPI yet. |
+| **Versioned docs** | Docs are published automatically from `master` and the suite runs in CI; there is one version of the docs, not one per release. The package is on PyPI (0.1.0, alpha). |
 
 Not planned unless demand appears: reinforcement-learning policies, POMDP solvers, evolutionary search, distributed consensus
 (DCOP). They are production-viable in specific domains but are poor defaults for LLM-agent workloads.

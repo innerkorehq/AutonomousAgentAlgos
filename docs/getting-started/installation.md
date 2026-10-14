@@ -2,9 +2,16 @@
 
 AAA requires **Python 3.11 or newer** and is fully asynchronous (`asyncio`).
 
+## From PyPI
+
+```bash
+pip install autonomous-agent-algos            # or: uv add autonomous-agent-algos
+pip install "autonomous-agent-algos[postgres,redis,mcp]"   # with optional extras (table below)
+```
+
 ## From source
 
-The package is not on PyPI yet. Install from the repository:
+To work on the library itself, install from the repository:
 
 === "uv"
 
