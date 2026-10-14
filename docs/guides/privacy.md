@@ -118,7 +118,7 @@ one cannot affect the other.)
 - Only **finished** runs can be erased. An open run raises `RunNotFinished`; cancel it first, or pass `force=True`.
 - It is **idempotent and crash-safe**: blobs go first, so a rerun after a crash finds the events and finishes the job.
 - A scrubbed run still reports its verdict: `await handle.result()` returns the outcome kind (the *value* is gone).
-- Children are separate runs. `acme.erase_all()` erases every finished run of the tenant.
+- Children are separate runs. `acme.erase_all()` erases every finished run of the tenant and, by default, the tenant's [long-term memories](memory.md#erasure-and-right-to-be-forgotten).
 
 !!! note "What AAA cannot erase"
     Anything outside its stores: **your own database backups**, logs your process wrote (`aaa.*` loggers include tracebacks),

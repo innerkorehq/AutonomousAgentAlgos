@@ -47,6 +47,10 @@ the `data` payload. `aaa.*` is reserved; your own events should use your own pre
 
 | Type | `data` |
 |---|---|
+| `aaa.memory.requested` | `op` (`recall`/`remember`/`forget`), `tag`, `query`/`k`/`filters`/`as_of`, `entries`, `ids` | An algorithm (`ToolLoop(recall=True)`) or you. Scope comes from the event's tenant and metadata, never the payload. See [Long-term memory](../guides/memory.md). |
+| `aaa.memory.started` | `op` | `MemoryHandler`, id `<request>:attempt`. Written before a non-idempotent write so a worker that dies mid-write is reported, not repeated. |
+| `aaa.memory.completed` | `op`, `tag`, `items` / `ids`, `pending`, `usage`, `cost` | `MemoryHandler`, id `<request>:result`. `usage`/`cost` count towards the run's ledger. |
+| `aaa.memory.failed` | `op`, `tag`, `error` | `MemoryHandler`. A failure here never fails the run. |
 | `aaa.validate.requested` | `candidate`, `validator`, `context` |
 | `aaa.validate.completed` | `verdict: {ok, feedback, score}` (id `<request>:result`) |
 

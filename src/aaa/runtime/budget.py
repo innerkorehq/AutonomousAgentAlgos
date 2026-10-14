@@ -29,6 +29,14 @@ class Ledger(BaseModel):
                 tokens=self.tokens + int(usage.get("total_tokens", 0)),
                 cost=self.cost + float(e.data.get("cost") or 0.0),
             )
+        if e.type in ("aaa.memory.completed", "aaa.memory.failed"):
+            # memory backends that call an LLM report what they spent; a lookup is not a 'step'
+            usage = e.data.get("usage") or {}
+            return Ledger(
+                steps=self.steps,
+                tokens=self.tokens + int(usage.get("total_tokens", 0)),
+                cost=self.cost + float(e.data.get("cost") or 0.0),
+            )
         if e.type == "aaa.child.completed":
             sub = e.data.get("ledger") or {}
             return Ledger(

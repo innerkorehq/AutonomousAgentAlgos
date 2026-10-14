@@ -2,6 +2,15 @@
 
 ## 0.1.0 (unreleased)
 
+**Long-term memory** (see [the guide](../guides/memory.md))
+
+- `aaa.memory`: a small `Memory` protocol (`add`, `search`) with optional capabilities (`Updatable`, `Deletable`, `Forgettable`, `Profiled`, `Listable`) and a tenant/user/agent `Scope`.
+- Backends: `NativeMemory`, `Mem0Memory` (open source and hosted), `GraphitiMemory` (temporal, point-in-time recall), `SupermemoryMemory` (HTTP), `LangGraphStoreMemory` (any LangGraph store, LangMem records read natively), `CallableMemory` for any other library, `FakeMemory` for tests.
+- Event-native: `MemoryHandler` (`aaa.memory.requested` → `completed`/`failed`, replayable, redacted, crash-safe writes), `ToolLoop(recall=True)` automatic recall, `WriteBack`, `memory_tools`.
+- Erasure: `engine.forget_memory(scope)`, `TenantScope.forget_memory(user=...)`, and `erase_all()` reaches registered memory backends.
+- Also: run metadata (`start(meta=...)`, `TenantScope.start(user=...)`), `ToolContext.tenant`/`meta`, `LLMEmbedder`, optional extras `mem0`, `graphiti`, `langgraph`, `langmem`.
+- CI: an `adapters` job replays each adapter's calls against the real libraries' signatures and runs weekly against their newest releases.
+
 **Privacy: tenancy, redaction, retention** (see [the guide](../guides/privacy.md))
 
 - `Event.tenant`, inherited by every derived event; `engine.tenant(name)` scopes that namespace run ids and check ownership on every lookup; `Engine(require_tenant=True)`.

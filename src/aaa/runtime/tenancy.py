@@ -14,7 +14,7 @@ from aaa.core.errors import TenantMismatch
 from aaa.core.ids import new_id
 from aaa.events import RunInfo
 from aaa.runtime.budget import Budget
-from aaa.runtime.retention import ErasureReport, PurgeReport
+from aaa.runtime.retention import ErasureReport, MemoryReport, PurgeReport
 
 if TYPE_CHECKING:
     from aaa.runtime.engine import Algorithm, Engine, RunHandle
@@ -42,9 +42,12 @@ class TenantScope:
         *,
         run_id: str | None = None,
         budget: Budget | None = None,
+        user: str | None = None,
         **kw: Any,
     ) -> RunHandle:
         rid = self.run_id(run_id or new_id())
+        if user is not None:  # who the run is for: memory is scoped by it (never by model output)
+            kw["meta"] = {**(kw.get("meta") or {}), "user": user}
         if kw.get("parent"):
             kw["parent"] = await self._owned(kw["parent"])
         handle = await self.engine.start(
@@ -85,7 +88,19 @@ class TenantScope:
         """Erase this tenant's finished runs older than `older_than` (never another tenant's)."""
         return await self.engine.purge(older_than=older_than, tenant=self.tenant, **kw)
 
-    async def erase_all(self, **kw: Any) -> PurgeReport:
-        """Right-to-erasure for the whole tenant: every FINISHED run now. Open runs are reported in
+    async def erase_all(self, *, memory: bool = True, **kw: Any) -> PurgeReport:
+        """Right-to-erasure for the whole tenant: every FINISHED run now, and (unless `memory=False`)
+        everything the engine's memory backends hold for the tenant. Open runs are reported in
         `skipped_open`; cancel them first, then call again."""
-        return await self.engine.purge(older_than=timedelta(0), tenant=self.tenant, **kw)
+        report = await self.engine.purge(older_than=timedelta(0), tenant=self.tenant, **kw)
+        if memory and self.engine.memories:
+            report.memory = await self.forget_memory()
+        return report
+
+    async def forget_memory(
+        self, *, user: str | None = None, agent: str | None = None
+    ) -> MemoryReport:
+        """Erase this tenant's long-term memories (or one user's / agent's) from every backend."""
+        from aaa.memory.types import Scope
+
+        return await self.engine.forget_memory(Scope(tenant=self.tenant, user=user, agent=agent))

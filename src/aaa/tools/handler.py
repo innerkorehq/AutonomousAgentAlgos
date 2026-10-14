@@ -354,6 +354,8 @@ class ToolHandler:
                     attempt=attempt,
                     fence=attempt,
                     idempotency_key=self._idempotency_key(req, t),
+                    tenant=req.tenant,
+                    meta=dict(req.meta),
                 )
                 result = await wait_for(t.invoke(req.data.get("arguments") or {}, ctx), t.timeout_s)
             return req.caused(

@@ -95,6 +95,7 @@ nav:
       - Running a cluster: guides/clusters.md
       - The tool execution guard: guides/tool-guard.md
       - Large payloads: guides/large-payloads.md
+      - Long-term memory: guides/memory.md
       - Tenancy, redaction, retention: guides/privacy.md
       - Testing your agents: guides/testing.md
       - Extending AAA: guides/extending.md
@@ -114,6 +115,7 @@ nav:
           - Tools: reference/api/tools.md
           - LLM: reference/api/llm.md
           - Data: reference/api/data.md
+          - Memory: reference/api/memory.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:

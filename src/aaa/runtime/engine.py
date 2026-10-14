@@ -31,7 +31,7 @@ from aaa.events import (
 )
 from aaa.privacy import Redactor
 from aaa.runtime.budget import Budget, Ledger
-from aaa.runtime.retention import ErasureReport, PurgeReport, RetentionPolicy
+from aaa.runtime.retention import ErasureReport, MemoryReport, PurgeReport, RetentionPolicy
 from aaa.runtime.tenancy import TenantScope, valid_tenant
 
 log = logging.getLogger("aaa.engine")
@@ -202,6 +202,7 @@ class Engine:
         redactor: Redactor | None = None,
         require_tenant: bool = False,
         retention: Sequence[RetentionPolicy] = (),
+        memory: Sequence[Any] = (),
     ) -> None:
         self.store: EventStore = store or InMemoryEventStore()
         self.bus = bus or InProcessBus()
@@ -220,6 +221,8 @@ class Engine:
             require_tenant,
             tuple(retention),
         )
+        # Long-term memory backends (aaa.memory): `forget_memory` reaches the ones that can erase.
+        self.memories: list[Any] = list(memory)
         self._tenants: dict[str, str | None] = {}  # run id -> tenant, for runs not hosted here
         self._retention_seen: dict[int, float] = {}
         self._runs: dict[str, _Run] = {}
@@ -315,6 +318,20 @@ class Engine:
         from aaa.runtime.retention import purge
 
         return await purge(self, older_than=older_than, tenant=tenant, delete=delete, reason=reason)
+
+    async def forget_memory(self, scope: Any) -> MemoryReport:
+        """Erase everything the registered memory backends hold for `scope` (an `aaa.memory.Scope`:
+        a tenant, or one user of it). Backends without a `forget` capability are reported, not skipped silently."""
+        from aaa.memory.base import Forgettable
+
+        report = MemoryReport()
+        for m in self.memories:
+            name = type(m).__name__
+            if isinstance(m, Forgettable):
+                report.forgotten[name] = report.forgotten.get(name, 0) + await m.forget(scope)
+            else:
+                report.unsupported.append(name)
+        return report
 
     async def apply_retention(self) -> PurgeReport:
         """Evaluate the configured `retention` policies now (each is rate-limited by its `interval_s`)."""
@@ -713,11 +730,14 @@ class Engine:
         parent: str | None = None,
         tag: str | None = None,
         tenant: str | None = None,
+        meta: dict[str, str | int | float | bool] | None = None,
     ) -> RunHandle:
         """Start a run (idempotent for a given `run_id`). With `parent`, the child's spend rolls
         up into the parent's budget, its completion is announced on the parent stream, and it is
         cancelled if the parent finishes first. `tenant` tags the run and everything derived from it
-        (children inherit their parent's); see `Engine.tenant()` for the safe, namespaced way."""
+        (children inherit their parent's); see `Engine.tenant()` for the safe, namespaced way. `meta`
+        is trusted application data (e.g. `{"user": "ann"}`) stamped on the run's events and inherited
+        by everything derived from them; memory scopes are built from it, never from model output."""
         self.register(algo)
         if tenant is not None:
             valid_tenant(tenant)
@@ -767,6 +787,7 @@ class Engine:
                     stream=rid,
                     run_id=rid,
                     tenant=tenant,
+                    meta=meta or {},
                     trace_id=run.trace_id,
                     source=algo.name,
                     data={

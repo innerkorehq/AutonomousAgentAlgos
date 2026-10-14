@@ -27,6 +27,9 @@ The core depends only on `pydantic`, `anyio` and `httpx`. Everything else is an 
 | `postgres` | `asyncpg` | `PostgresEventStore` and its bus backend |
 | `redis` | `redis` | `RedisEventStore` and its bus backend |
 | `litellm` | `litellm` | the in-process LiteLLM adapter (`provider="litellm"`) |
+| `mem0` | `mem0ai` | `Mem0Memory` ([memory](../guides/memory.md)) |
+| `graphiti` | `graphiti-core` | `GraphitiMemory` (also needs Neo4j, FalkorDB or Neptune) |
+| `langgraph` / `langmem` | `langgraph` / `langmem` | `LangGraphStoreMemory`, and LangMem's tools and managers on the same store |
 | `docs` | `mkdocs`, `mkdocs-material`, `mkdocstrings` | building this documentation |
 
 ```bash

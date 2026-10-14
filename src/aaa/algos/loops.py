@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -13,6 +16,33 @@ from aaa.llm.types import LLMRequest, LLMResponse, Message
 from aaa.runtime import Ctx
 from aaa.tools import ToolRegistry
 
+log = logging.getLogger("aaa.loops")
+MEMORY_REQUESTED = "aaa.memory.requested"
+MEMORY_COMPLETED = "aaa.memory.completed"
+MEMORY_FAILED = "aaa.memory.failed"
+
+
+def _default_query(inp: dict[str, Any]) -> str:
+    if inp.get("task") is not None:
+        return str(inp["task"])
+    users = [m for m in inp.get("messages") or [] if m.get("role") == "user"]
+    return str(users[-1].get("content", "")) if users else ""
+
+
+@dataclass
+class RecallConfig:
+    """Look up long-term memory before the first model call and put it in the prompt.
+
+    Needs a `MemoryHandler` attached to the engine (without one, recall is skipped with a warning).
+    A failing or slow memory backend never fails the run: the loop simply continues without memories."""
+
+    k: int = 5
+    query: Callable[[dict[str, Any]], str] = (
+        _default_query  # what to search for, from the run input
+    )
+    max_chars: int = 2000  # how much recalled text may enter the prompt
+    as_of: str | None = None  # ISO timestamp for point-in-time recall on temporal backends
+
 
 class LoopState(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
@@ -22,6 +52,7 @@ class LoopState(BaseModel):
     round_calls: list[str] = Field(default_factory=list)
     names: dict[str, str] = Field(default_factory=dict)
     results: dict[str, tuple[bool, Any]] = Field(default_factory=dict)
+    recalled: list[str] = Field(default_factory=list)  # memory lines to show the model
 
 
 def apply(st: LoopState, e: Event) -> LoopState:
@@ -29,6 +60,10 @@ def apply(st: LoopState, e: Event) -> LoopState:
     d = e.data
     if e.type == "aaa.run.started":
         st.input = d.get("input", {})
+    elif e.type == MEMORY_REQUESTED and d.get("tag") == "recall":
+        st.phase = "recall"
+    elif e.type == MEMORY_COMPLETED and d.get("tag") == "recall":
+        st.recalled = [_memory_line(m) for m in d.get("items", [])]
     elif e.type == "aaa.llm.requested" and d.get("tag") == "main":
         st.request_id = e.id
         st.phase, st.round_calls, st.results = "llm", [], {}
@@ -50,7 +85,12 @@ def apply(st: LoopState, e: Event) -> LoopState:
     return st
 
 
-LOOP = Projection(LoopState, apply, name="aaa.loop", version=2, state_type=LoopState)
+def _memory_line(m: dict[str, Any]) -> str:
+    since = f" (since {str(m['valid_at'])[:10]})" if m.get("valid_at") else ""
+    return f"- {m['text']}{since}"
+
+
+LOOP = Projection(LoopState, apply, name="aaa.loop", version=3, state_type=LoopState)
 
 
 class LLMLoop:
@@ -70,12 +110,14 @@ class LLMLoop:
         tool_names: list[str] | None = None,
         name: str | None = None,
         stream: bool = False,
+        recall: RecallConfig | bool | None = None,
     ) -> None:
         if name:
             self.name = name
         self.tools, self.system, self.model = tools, system, model
         self.stream = stream  # ask the LLM handler to stream (emits aaa.llm.delta events)
         self.max_turns, self.params, self.tool_names = max_turns, params or {}, tool_names
+        self.recall = RecallConfig() if recall is True else (recall or None)
 
     def subscriptions(self) -> list[str]:
         return [
@@ -84,6 +126,7 @@ class LLMLoop:
             "aaa.llm.failed",
             "aaa.tool.completed",
             "aaa.tool.failed",
+            *([MEMORY_COMPLETED, MEMORY_FAILED] if self.recall else []),
         ]
 
     # hooks -----------------------------------------------------------------------------
@@ -101,12 +144,52 @@ class LLMLoop:
     def observations(self, st: LoopState) -> list[Message]:
         raise NotImplementedError
 
+    def with_memory(self, messages: list[Message], st: LoopState) -> list[Message]:
+        """Insert the recalled memories as a system message after the existing system prompt."""
+        if not st.recalled or self.recall is None:
+            return messages
+        lines: list[str] = []
+        used = 0
+        for line in st.recalled:
+            if used + len(line) > self.recall.max_chars and lines:
+                break
+            lines.append(line)
+            used += len(line) + 1
+        note = Message(
+            role="system",
+            content="What you remember from earlier (use only if relevant):\n" + "\n".join(lines),
+        )
+        at = next((i for i, m in enumerate(messages) if m.role != "system"), len(messages))
+        return [*messages[:at], note, *messages[at:]]
+
     # driver ----------------------------------------------------------------------------
     async def on_event(self, e: Event, ctx: Ctx) -> list[Event]:
+        if e.type in (MEMORY_COMPLETED, MEMORY_FAILED):
+            if e.data.get("tag") != "recall":
+                return []
+            st = await ctx.project(LOOP)  # recall finished (or failed): now ask the model
+            return [
+                llm_request(e, self.request(self.with_memory(self.initial_messages(st.input), st)))
+            ]
         if e.data.get("tag", "main") != "main":
             return []
         st = await ctx.project(LOOP)
         if e.type == "aaa.run.started":
+            if self.recall is not None:
+                if ctx.engine.memories:
+                    return [
+                        e.caused(
+                            MEMORY_REQUESTED,
+                            {
+                                "op": "recall",
+                                "tag": "recall",
+                                "query": self.recall.query(st.input),
+                                "k": self.recall.k,
+                                **({"as_of": self.recall.as_of} if self.recall.as_of else {}),
+                            },
+                        )
+                    ]
+                log.warning("recall is enabled but no memory backend is attached; skipping it")
             return [llm_request(e, self.request(self.initial_messages(st.input)))]
         if e.type == "aaa.llm.failed":
             err = e.data["error"]

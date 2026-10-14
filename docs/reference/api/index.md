@@ -9,6 +9,7 @@ Generated from the source docstrings and type hints, so it is always in step wit
 | [`aaa.tools`](tools.md) | `@tool`, `ToolRegistry`, `ToolHandler`, `ToolContext`, the guard configuration. |
 | [`aaa.llm`](llm.md) | Clients, gateway presets, wrappers, handler, fakes, message types, errors. |
 | [`aaa.data`](data.md) | `Item`, codecs, blob stores, `Index`. |
+| [`aaa.memory`](memory.md) | The `Memory` protocol and capabilities, `Scope`, `MemoryHandler`, `memory_tools`, and the Mem0, Graphiti, Supermemory, LangGraph, native and callable backends. |
 | [`aaa.events`](events.md) | `Event`, stores, buses, projections and snapshots, schemas, CloudEvents, guards. |
 | [`aaa.validate`, `aaa.core`](core.md) | Validators; outcomes, errors, ids. |
 

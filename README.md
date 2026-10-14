@@ -39,6 +39,17 @@ async with Engine() as eng:
    This is safe because algorithms decide from folded state, and every derived event has a
    deterministic id, so a repeated reaction is absorbed by the store instead of duplicating.
 
+## Long-term memory
+`aaa.memory` gives agents memory across runs behind one small protocol, with adapters for **Mem0**, **Graphiti** (Zep's engine),
+**Supermemory** and **LangGraph/LangMem** stores, a built-in `NativeMemory`, and `CallableMemory` to wrap any other library.
+Memory is scoped by the run's tenant and user (never by model output), goes through the event log (replayable, redacted), and
+is erasable per user.
+```python
+MemoryHandler(Mem0Memory(AsyncMemory()), write_back=WriteBack()).attach(engine)
+algo = ToolLoop(registry, recall=True)                       # recall before the first model call
+await engine.tenant("acme").run(algo, {"task": "..."}, user="ann")
+```
+
 ## Layout
 `core` ids/outcomes/errors · `events` envelope, stores (memory/SQLite/Postgres/Redis), buses (in-process/distributed), projections+snapshots, schemas,
 CloudEvents · `data` Item/Codec/BlobStore/Index · `llm` client protocol, OpenAI-compatible

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, ValidationError, create_model
@@ -36,6 +36,8 @@ class ToolContext:
     attempt: int = 1
     fence: int = 1
     idempotency_key: str = ""
+    tenant: str | None = None  # the run's tenant (from the log, never from the model)
+    meta: dict[str, Any] = field(default_factory=dict)  # the run's metadata, e.g. {"user": ...}
 
 
 def _strip_titles(schema: Any) -> Any:

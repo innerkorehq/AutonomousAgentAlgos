@@ -26,6 +26,8 @@ PROTECTED_KEYS = frozenset(
     {
         "call_id",
         "child_run_id",
+        "user",  # scoping metadata (run meta): rewriting it would silently change whose data it is
+        "agent",
         "parent",
         "run_tag",
         "tag",

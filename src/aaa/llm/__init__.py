@@ -1,6 +1,7 @@
 from aaa.llm import gateways
 from aaa.llm.client import LLMClient, StreamingLLMClient
 from aaa.llm.config import LLMConfig
+from aaa.llm.embedder import LLMEmbedder
 from aaa.llm.factory import build_client, register_provider
 from aaa.llm.fake import FakeLLMClient, ReplayLLMClient
 from aaa.llm.handler import LLMHandler
@@ -24,6 +25,7 @@ __all__ = [
     "FakeLLMClient",
     "LLMClient",
     "LLMConfig",
+    "LLMEmbedder",
     "LLMHandler",
     "LLMRequest",
     "LLMResponse",

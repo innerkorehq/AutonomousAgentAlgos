@@ -73,6 +73,14 @@ EXPECTED = {
         "still finished: True",
         "globex untouched: True",
     ],
+    "memory_agent.py": [
+        "first run stored: ['Ann is vegetarian and lives in Lisbon']",
+        "ann, new run: A vegetarian place in Lisbon: Ao 26.",
+        "bob, same tenant: Which cuisine do you like?",
+        "ann at another tenant: Which cuisine do you like?",
+        "forgot: {'NativeMemory': 1}",
+        "ann after forgetting: Which cuisine do you like?",
+    ],
     "ensembles.py": [
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",

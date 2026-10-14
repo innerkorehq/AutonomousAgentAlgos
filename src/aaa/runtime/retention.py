@@ -54,9 +54,16 @@ class ErasureReport:
 
 
 @dataclass
+class MemoryReport:
+    forgotten: dict[str, int] = field(default_factory=dict)  # backend class -> memories removed
+    unsupported: list[str] = field(default_factory=list)  # backends that cannot forget
+
+
+@dataclass
 class PurgeReport:
     erased: list[ErasureReport] = field(default_factory=list)
     skipped_open: int = 0
+    memory: MemoryReport | None = None  # set by TenantScope.erase_all
 
     @property
     def streams(self) -> list[str]:

@@ -8,6 +8,8 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1" # weekly: do the memory libraries' newest releases still match our adapters?
 
 permissions:
   contents: read
@@ -74,3 +76,24 @@ jobs:
         # -v names every test, and a test stuck for 2 minutes dumps all thread stacks, so a hang is
         # diagnosable from the log instead of just a cancelled job.
         run: uv run pytest -v -p no:cacheprovider -o faulthandler_timeout=120
+
+  adapters:
+    # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
+    # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped
+    # in the main job because those libraries are not dev dependencies.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Locked versions
+        run: |
+          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem
+          uv run pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py
+      - name: Newest releases (scheduled and manual runs only)
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        run: |
+          uv pip install --upgrade mem0ai graphiti-core langgraph langmem
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py
