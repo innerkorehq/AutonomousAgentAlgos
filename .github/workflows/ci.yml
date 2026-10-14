@@ -35,7 +35,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -71,4 +71,6 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: uv sync --frozen
       - name: tests
-        run: uv run pytest -q -p no:cacheprovider
+        # -v names every test, and a test stuck for 2 minutes dumps all thread stacks, so a hang is
+        # diagnosable from the log instead of just a cancelled job.
+        run: uv run pytest -v -p no:cacheprovider -o faulthandler_timeout=120

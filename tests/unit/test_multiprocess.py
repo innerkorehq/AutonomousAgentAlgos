@@ -163,17 +163,17 @@ async def test_sigkill_in_the_middle_of_a_tool_call_another_process_finishes_it(
         assert all(
             starts[n] == 2 and len(who[n]) == 2 for n in in_flight
         )  # re-run once, on a DIFFERENT process
-        assert all(
-            starts[n] == 1 for n in set(range(1, 10)) - in_flight
-        )  # everything else exactly once
+        # Everything else ran its body exactly once. (A kill can land between a worker recording
+        # `aaa.tool.started` and the test's effect marker; that call is correctly redelivered as
+        # attempt 2 but only ever ran once, so the log may show 2 attempts for it.)
+        assert all(starts[n] == 1 for n in set(range(1, 10)) - in_flight)
         for h in handles:
             log = await node.store.read(h.run_id)
             c = Counter(e.type for e in log)
             assert c["aaa.tool.completed"] == 1 and c["aaa.run.completed"] == 1
             n = int(h.run_id.split("-")[1])
-            assert [e.data["attempt"] for e in log if e.type == "aaa.tool.started"] == (
-                [1, 2] if n in in_flight else [1]
-            )
+            attempts = [e.data["attempt"] for e in log if e.type == "aaa.tool.started"]
+            assert attempts == [1, 2] if n in in_flight else attempts in ([1], [1, 2])
     finally:
         await _teardown(procs, client, cluster)
 
@@ -214,8 +214,12 @@ async def test_sigkill_mid_call_for_an_at_most_once_tool_is_reported_not_rerun(
                 assert (
                     "OutcomeUnknown" in o.value["text"] and starts[n] == 1
                 )  # never executed a second time
+            elif "OutcomeUnknown" in o.value["text"]:
+                # killed after the attempt was recorded but before the test's effect marker:
+                # still reported, never re-run
+                assert starts[n] <= 1
             else:
-                assert "OutcomeUnknown" not in o.value["text"] and starts[n] == 1
+                assert starts[n] == 1
     finally:
         await _teardown(procs, client, cluster)
 

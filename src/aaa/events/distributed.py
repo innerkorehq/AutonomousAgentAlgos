@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from typing import Protocol, Self, runtime_checkable
 
 from aaa.core.aio import raise_if_cancelling, wait_event
-from aaa.core.aio import wait_for as cancel_safe_wait_for
 from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.events.bus import DeliverySlot, Handler, current_delivery
@@ -87,32 +86,28 @@ class MemoryBusBackend:
         self._cursors: dict[tuple[str, int], int] = {}
         self._leases: dict[tuple[str, int], tuple[str, float]] = {}
         self._members: dict[str, dict[str, float]] = {}
-        self._conds: dict[int, asyncio.Condition] = {}
+        # One event per partition, replaced on every append: a reader grabs the current event, waits
+        # on it, then re-reads the log. (No Condition: its lock would have to be held across a
+        # cancellable wait, and a cancel racing the unwind can leak that lock and wedge every reader.)
+        self._wakeups: dict[int, asyncio.Event] = {}
 
-    def _cond(self, p: int) -> asyncio.Condition:
-        return self._conds.setdefault(p, asyncio.Condition())
+    def _wakeup(self, p: int) -> asyncio.Event:
+        return self._wakeups.setdefault(p, asyncio.Event())
 
     async def enqueue(self, event: Event) -> int:
         p = partition_of(event.stream, self.partitions)
-        async with self._cond(p):
-            eid = len(self._log[p]) + 1
-            self._log[p].append((eid, event))
-            self._cond(p).notify_all()
-            return eid
+        eid = len(self._log[p]) + 1
+        self._log[p].append((eid, event))
+        self._wakeup(p).set()  # wake the current waiters...
+        del self._wakeups[p]  # ...later readers wait on a fresh event
+        return eid
 
     async def read(
         self, partition: int, after: int, limit: int, wait_s: float
     ) -> list[tuple[int, Event]]:
-        cond = self._cond(partition)
-        async with cond:
-            if len(self._log[partition]) <= after and wait_s > 0:
-                try:
-                    await cancel_safe_wait_for(
-                        cond.wait_for(lambda: len(self._log[partition]) > after), wait_s
-                    )
-                except TimeoutError:
-                    return []
-            return self._log[partition][after : after + limit]
+        if len(self._log[partition]) <= after and wait_s > 0:
+            await wait_event(self._wakeup(partition), wait_s)
+        return self._log[partition][after : after + limit]
 
     async def tail(self, partition: int) -> int:
         return len(self._log[partition])
