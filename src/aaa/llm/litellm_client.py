@@ -21,7 +21,7 @@ class LiteLLMClient:
 
     def __init__(self, config: LLMConfig) -> None:
         try:
-            import litellm
+            import litellm  # pyright: ignore[reportMissingImports] - optional extra
         except ImportError as e:  # pragma: no cover
             raise LLMConfigError("install the 'litellm' extra to use provider='litellm'") from e
         self._litellm = litellm

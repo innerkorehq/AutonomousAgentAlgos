@@ -98,7 +98,9 @@ async def t_complete():
     assert (r.message.content or "").strip(), f"empty content (finish_reason={r.finish_reason})"
     assert r.usage.total_tokens > 0, "gateway returned no usage"
     await c.aclose()
-    return f"{r.message.content.strip()[:40]!r} tokens={r.usage.total_tokens} model={r.model}"
+    return (
+        f"{(r.message.content or '').strip()[:40]!r} tokens={r.usage.total_tokens} model={r.model}"
+    )
 
 
 @check("streaming yields incremental chunks and the same text")

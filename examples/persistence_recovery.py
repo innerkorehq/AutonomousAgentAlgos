@@ -34,35 +34,36 @@ class HangsOnSecondCall:
 
 
 async def boot(db: Path, llm):
-    engine = await Engine(store=SQLiteEventStore(db)).__aenter__()
+    store = SQLiteEventStore(db)
+    engine = await Engine(store=store).__aenter__()
     LLMHandler(llm).attach(engine)
     registry = ToolRegistry([lookup])
     ToolHandler(registry).attach(engine)
-    return engine, ToolLoop(registry)
+    return engine, ToolLoop(registry), store
 
 
 async def main() -> None:
     db = Path(tempfile.mkdtemp()) / "agent.db"
 
     # --- process 1: starts a run, then "crashes" with the LLM request in flight
-    engine, agent = await boot(db, HangsOnSecondCall())
+    engine, agent, store = await boot(db, HangsOnSecondCall())
     await engine.start(agent, {"task": "look up x"}, run_id="job-42")
     while not any(e.type == "aaa.tool.completed" for e in await engine.store.read("job-42")):
         await asyncio.sleep(0.02)
     await asyncio.sleep(0.2)
     await engine.abort()  # models a crash: nothing is completed, drained, or cleaned up
-    await engine.store.aclose()
+    await store.aclose()
     print("process 1 died with the run open")
 
     # --- process 2: same database, new engine; recover() re-adopts every open run
-    engine, agent = await boot(
+    engine, agent, store = await boot(
         db, FakeLLMClient(lambda r: text(f"result: {r.messages[-1].content}"))
     )
     handles = await engine.recover([agent])
     outcome = await handles["job-42"].result()
     print(f"process 2 recovered {len(handles)} run(s):", outcome.value["text"])
     await engine.__aexit__(None, None, None)
-    await engine.store.aclose()
+    await store.aclose()
 
 
 asyncio.run(main())

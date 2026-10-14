@@ -203,7 +203,7 @@ async def test_real_dropped_connections_mid_run_are_ridden_out(cluster):
         await asyncio.sleep(0.35)
         await _kill_connections(cluster)  # LLM, tool, bus, lease and listener connections all die
     out = await asyncio.wait_for(run.result(), 60)
-    log = await node.store.read(run.run_id)
+    log = await eng.retry(lambda: node.store.read(run.run_id), "read")
     await eng.__aexit__(None, None, None)
     c = Counter(e.type for e in log)
     assert out.ok and out.value["text"] == "done: ok"

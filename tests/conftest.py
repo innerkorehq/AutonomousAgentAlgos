@@ -193,3 +193,27 @@ async def cluster(request, prefix):
     await c.setup()
     yield c
     await c.close()
+
+
+@pytest.fixture(autouse=True)
+def _hang_watchdog():
+    """If a test runs far longer than any legitimate one, print every pending asyncio task's stack
+    (a hung event loop is invisible to faulthandler, which only shows the idle selector). Runs on a
+    timer thread and only reads, so it cannot disturb the test."""
+    import gc
+    import sys
+    import threading
+
+    def dump() -> None:
+        print("\n=== WATCHDOG: test still running after 150s; pending tasks ===", file=sys.stderr)
+        for obj in gc.get_objects():
+            if isinstance(obj, asyncio.Task) and not obj.done():
+                print(f"--- {obj.get_name()} {obj.get_coro()!r}", file=sys.stderr)
+                obj.print_stack(limit=6, file=sys.stderr)
+        sys.stderr.flush()
+
+    timer = threading.Timer(150, dump)
+    timer.daemon = True
+    timer.start()
+    yield
+    timer.cancel()

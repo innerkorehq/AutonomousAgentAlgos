@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -20,7 +20,9 @@ class Outcome(BaseModel, Generic[T]):
     """Terminal result of a run; failure modes are distinct, never conflated."""
 
     kind: OutcomeKind
-    value: T | None = None
+    # `| Any` on purpose: the shape of `value` depends on the algorithm (documented per algorithm), and
+    # a bare `T | None` forces every caller to narrow `outcome.value` before indexing it.
+    value: T | Any = None
     reason: str | None = None
 
     @property

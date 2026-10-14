@@ -29,13 +29,13 @@ class RetryPolicy(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    max_attempts: int | None = Field(None, ge=1)
+    max_attempts: int | None = Field(default=None, ge=1)
     """Total tries including the first."""
-    max_elapsed_s: float | None = Field(30.0, gt=0)
+    max_elapsed_s: float | None = Field(default=30.0, gt=0)
     """Total time budget for backing off (not counting the time the operation itself takes)."""
-    base_delay_s: float = Field(0.1, gt=0)
-    max_delay_s: float = Field(2.0, gt=0)
-    multiplier: float = Field(2.0, ge=1)
+    base_delay_s: float = Field(default=0.1, gt=0)
+    max_delay_s: float = Field(default=2.0, gt=0)
+    multiplier: float = Field(default=2.0, ge=1)
     jitter: bool = True
     """Full jitter (uniform in [0, delay]) so many workers do not retry in lock-step."""
 

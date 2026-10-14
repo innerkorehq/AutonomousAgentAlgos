@@ -101,7 +101,10 @@ def _s(x: Any) -> str:
 
 class RedisEventStore:
     def __init__(self, r: aioredis.Redis, partitions: int, prefix: str, outbox: bool) -> None:
-        self.r, self.partitions, self.prefix, self.outbox = r, partitions, prefix, outbox
+        # redis-py's asyncio client is typed as sync-or-awaitable unions that type checkers cannot
+        # resolve, so the handle is deliberately `Any`; behavior is covered by the contract tests.
+        self.r: Any = r
+        self.partitions, self.prefix, self.outbox = partitions, prefix, outbox
         self._append = r.register_script(_APPEND)
         self._backend: RedisBusBackend | None = None
 
@@ -109,7 +112,7 @@ class RedisEventStore:
     async def create(
         cls, url: str, *, partitions: int = 16, prefix: str = "aaa", outbox: bool = True
     ) -> RedisEventStore:
-        r = aioredis.from_url(url, decode_responses=False)
+        r: Any = aioredis.from_url(url, decode_responses=False)
         key = f"{prefix}:meta:partitions"
         await r.set(key, str(partitions), nx=True)
         have = int(await r.get(key))

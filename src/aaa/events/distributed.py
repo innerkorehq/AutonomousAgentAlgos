@@ -29,6 +29,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol, Self, runtime_checkable
 
+from aaa.core.aio import raise_if_cancelling, wait_event
 from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.events.bus import DeliverySlot, Handler, current_delivery
@@ -85,32 +86,28 @@ class MemoryBusBackend:
         self._cursors: dict[tuple[str, int], int] = {}
         self._leases: dict[tuple[str, int], tuple[str, float]] = {}
         self._members: dict[str, dict[str, float]] = {}
-        self._conds: dict[int, asyncio.Condition] = {}
+        # One event per partition, replaced on every append: a reader grabs the current event, waits
+        # on it, then re-reads the log. (No Condition: its lock would have to be held across a
+        # cancellable wait, and a cancel racing the unwind can leak that lock and wedge every reader.)
+        self._wakeups: dict[int, asyncio.Event] = {}
 
-    def _cond(self, p: int) -> asyncio.Condition:
-        return self._conds.setdefault(p, asyncio.Condition())
+    def _wakeup(self, p: int) -> asyncio.Event:
+        return self._wakeups.setdefault(p, asyncio.Event())
 
     async def enqueue(self, event: Event) -> int:
         p = partition_of(event.stream, self.partitions)
-        async with self._cond(p):
-            eid = len(self._log[p]) + 1
-            self._log[p].append((eid, event))
-            self._cond(p).notify_all()
-            return eid
+        eid = len(self._log[p]) + 1
+        self._log[p].append((eid, event))
+        self._wakeup(p).set()  # wake the current waiters...
+        del self._wakeups[p]  # ...later readers wait on a fresh event
+        return eid
 
     async def read(
         self, partition: int, after: int, limit: int, wait_s: float
     ) -> list[tuple[int, Event]]:
-        cond = self._cond(partition)
-        async with cond:
-            if len(self._log[partition]) <= after and wait_s > 0:
-                try:
-                    await asyncio.wait_for(
-                        cond.wait_for(lambda: len(self._log[partition]) > after), wait_s
-                    )
-                except TimeoutError:
-                    return []
-            return self._log[partition][after : after + limit]
+        if len(self._log[partition]) <= after and wait_s > 0:
+            await wait_event(self._wakeup(partition), wait_s)
+        return self._log[partition][after : after + limit]
 
     async def tail(self, partition: int) -> int:
         return len(self._log[partition])
@@ -306,17 +303,15 @@ class DistributedBus:
         return {g: sorted(ps) for g, ps in out.items()}
 
     async def _manage(self) -> None:
-        while True:
+        while self._running:
+            raise_if_cancelling()
             try:
                 await self._rebalance()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("bus rebalance failed")
-            try:
-                await asyncio.wait_for(self._wake.wait(), self.tick_s)
-            except TimeoutError:
-                pass
+            await wait_event(self._wake, self.tick_s)
             self._wake.clear()
 
     async def _rebalance(self) -> None:
@@ -446,6 +441,7 @@ class DistributedBus:
                 await slot.deferral.wait()
 
         while True:
+            raise_if_cancelling()  # see aaa.core.aio: a swallowed cancel must still end this loop
             try:
                 entries = await self.backend.read(c.partition, c.read_upto, self.batch, self.poll_s)
                 for eid, ev in entries:
@@ -476,6 +472,7 @@ class DistributedBus:
                 except Exception:  # noqa: BLE001 - keep the reader alive through an outage
                     await asyncio.sleep(self._redeliver_delay(1))
             while True:
+                raise_if_cancelling()
                 try:
                     batch = await self.backend.read(p, cur, self.batch, self.poll_s)
                 except asyncio.CancelledError:

@@ -2,6 +2,15 @@
 
 ## 0.0.1 (unreleased)
 
+**Quality gates**
+
+- CI: ruff, `pyright` (0 errors over the library, examples and scripts) and the full suite on Python 3.11 and 3.12 against real Postgres and Redis.
+- Type-correctness fixes found by pyright: the `EventBus` and `EventStore` protocols now declare what the engine and users rely on (`aclose`, `drain`, `abort`, `execution_guard`);
+  `Algorithm.on_event` and `LLMClient.complete/stream` take positional-only parameters so any implementation naming (`e`, `request`, ...) type-checks (previously every built-in
+  algorithm was rejected when passed to `Engine.run`); `Outcome.value` no longer forces narrowing before indexing.
+- Python 3.11: long-lived loops could outlive a cancellation (the standard library's `asyncio.timeout`, used by redis-py, can swallow a cancel that races its deadline), which made
+  `abort()`/shutdown hang with Redis. Loops now re-raise a swallowed cancel, and `aaa.core.wait_for`/`wait_event` replace `asyncio.wait_for` where tasks are shut down by cancellation.
+
 **Resilience**
 
 - Store outages no longer fail runs or lose reactions: bounded retry with backoff (`Engine(store_retry=...)`), `Redeliver` so the bus delivers an event again, a tool

@@ -21,6 +21,7 @@ from typing import Any
 
 import asyncpg
 
+from aaa.core.aio import wait_event
 from aaa.core.errors import ConcurrencyError
 from aaa.events.distributed import partition_of
 from aaa.events.event import Event
@@ -95,8 +96,9 @@ class PostgresEventStore:
 
     async def _start_listener(self) -> None:
         try:
-            self._listener = await asyncpg.connect(self.dsn)
-            await self._listener.add_listener(CHANNEL, self._on_notify)
+            conn = await asyncpg.connect(self.dsn)
+            self._listener = conn
+            await conn.add_listener(CHANNEL, self._on_notify)
         except Exception:
             log.warning("LISTEN unavailable; falling back to polling", exc_info=True)
             self._listener = None
@@ -108,10 +110,7 @@ class PostgresEventStore:
         return self._signals.setdefault(p, asyncio.Event())
 
     async def _wait(self, p: int, timeout: float) -> None:
-        try:
-            await asyncio.wait_for(self._signal(p).wait(), timeout)
-        except TimeoutError:
-            pass
+        await wait_event(self._signal(p), timeout)
 
     def bus_backend(self) -> PostgresBusBackend:
         if self._backend is None:
@@ -329,7 +328,7 @@ class PostgresBusBackend:
         if self._lease_conn is None or self._lease_conn.is_closed():
             self._held.clear()  # a new session holds nothing
             self._lease_conn = await asyncpg.connect(self.store.dsn)
-        return self._lease_conn
+        return self._lease_conn  # type: ignore[return-value]
 
     async def try_lease(self, group: str, partition: int, member: str, ttl_s: float) -> bool:
         async with self._lease_lock:

@@ -225,7 +225,8 @@ class ReAct(LLMLoop):
         if stop := self._budget_exhausted(e, st):
             return [stop]
         name = action.group(1).strip().strip("`")
-        raw = (_INPUT.search(text).group(1).strip() if _INPUT.search(text) else "{}") or "{}"
+        m_input = _INPUT.search(text)
+        raw = (m_input.group(1).strip() if m_input else "{}") or "{}"
         try:
             args = json.loads(raw.split("\nObservation:")[0].strip())
             if not isinstance(args, dict):

@@ -11,7 +11,8 @@ from typing import Any, Protocol, Self, TypeVar
 
 from pydantic import BaseModel, Field
 
-from aaa.core.errors import Redeliver
+from aaa.core.aio import raise_if_cancelling
+from aaa.core.errors import Redeliver, StoreUnavailable
 from aaa.core.ids import new_id
 from aaa.core.outcome import Outcome, OutcomeKind
 from aaa.core.retry import RetryPolicy, retrying
@@ -98,7 +99,8 @@ class Ctx:
     async def history(self, from_seq: int = 0) -> list[Event]:
         """The run's events with any claim-checked payloads restored."""
         assert self.run_id
-        raw = await self.engine.retry(lambda: self.engine.store.read(self.run_id, from_seq), "read")
+        rid = self.run_id
+        raw = await self.engine.retry(lambda: self.engine.store.read(rid, from_seq), "read")
         return [await self.engine.hydrate(e) for e in raw]
 
     async def project(self, projection: Projection[S]) -> S:
@@ -123,7 +125,9 @@ class Algorithm(Protocol):
         """Event-type glob patterns this algorithm reacts to."""
         ...
 
-    async def on_event(self, event: Event, ctx: Ctx) -> list[Event]: ...
+    async def on_event(self, event: Event, ctx: Ctx, /) -> list[Event]:
+        # positional-only so implementations may name the parameters anything (`e`, `evt`, ...)
+        ...
 
 
 class RunHandle:
@@ -589,10 +593,35 @@ class Engine:
             log.exception("could not enforce the deadline of run %s; sweep() will retry", run_id)
 
     async def _await_completed(self, run_id: str) -> Outcome[Any]:
-        async for e in self.store.subscribe(run_id):
-            if e.type == RUN_COMPLETED:
-                return Outcome(**e.data)
-        raise AssertionError("unreachable")
+        # A dropped store connection mid-read is ridden out like any other store call: resubscribe
+        # from the last event seen, backing off per `store_retry` (the budget restarts on progress).
+        pos, attempt, started = 0, 0, time.monotonic()
+        while True:
+            try:
+                async for e in self.store.subscribe(run_id, pos):
+                    pos, attempt, started = e.seq + 1, 0, time.monotonic()
+                    if e.type == RUN_COMPLETED:
+                        return Outcome(**e.data)
+                raise AssertionError("unreachable")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                if not self.is_transient(exc):
+                    raise
+                attempt += 1
+                delay, policy = self.store_retry.delay(attempt), self.store_retry
+                spent = time.monotonic() - started
+                if (policy.max_attempts is not None and attempt >= policy.max_attempts) or (
+                    policy.max_elapsed_s is not None and spent + delay > policy.max_elapsed_s
+                ):
+                    raise StoreUnavailable(
+                        f"waiting for run {run_id} still failing after {attempt} attempt(s): "
+                        f"{type(exc).__name__}: {exc}"
+                    ) from exc
+                log.warning(
+                    "subscribe to %s failed (%s); resubscribing in %.2fs", run_id, exc, delay
+                )
+                await asyncio.sleep(delay)
 
     # -- runs -------------------------------------------------------------------------------
     async def start(
@@ -683,6 +712,7 @@ class Engine:
     async def _sweep_loop(self) -> None:
         while True:
             await asyncio.sleep(self.sweep_interval_s or 5)
+            raise_if_cancelling()
             try:
                 await self.sweep()
             except Exception:

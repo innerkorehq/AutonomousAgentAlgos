@@ -10,11 +10,12 @@ cd AutonomousAgentAlgos
 uv sync --extra docs        # dev tools, Postgres/Redis clients, and the docs toolchain
 uv run pytest -q            # the full suite (starts throwaway Postgres/Redis if their binaries exist)
 uv run ruff check . && uv run ruff format --check .
+uv run pyright                 # library, examples and scripts must stay at 0 errors
 uv run mkdocs build --strict
 ```
 
 The Postgres and Redis tests launch temporary servers on random ports and never touch yours (needs `initdb`/`postgres` and `redis-server`
-installed; set `AAA_TEST_PG_BIN` if they are off `PATH`). Without them those tests skip. A full run takes about 90 seconds.
+installed; set `AAA_TEST_PG_BIN` if they are off `PATH`). Without them those tests skip. A full run takes about two minutes. CI (`.github/workflows/ci.yml`) runs lint, pyright and the whole suite on Python 3.11 and 3.12 against real Postgres and Redis services.
 
 ## Repository map
 
