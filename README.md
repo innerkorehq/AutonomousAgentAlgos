@@ -56,17 +56,20 @@ GeneratorCritic, WorkflowGraph (deterministic DAG), FSM, SelfConsistency, RAGAge
 **Single process, restart safe** (`InProcessBus` + a durable store):
 ```python
 async with Engine(store=SQLiteEventStore("agent.db")) as eng:
-    LLMHandler(client).attach(eng); ToolHandler(registry).attach(eng)
-    handles = await eng.recover([ToolLoop(registry), PlanAndExecute(...)])   # after a crash
+    LLMHandler(client).attach(eng)
+    ToolHandler(registry).attach(eng)
+    handles = await eng.recover([ToolLoop(registry), PlanAndExecute(...)])  # after a crash
 ```
 
 **Multi-process** (`DistributedBus` over Postgres or Redis; run the same worker code N times):
 ```python
-store = await PostgresEventStore.create(DSN, partitions=16)      # or RedisEventStore.create(URL, ...)
+store = await PostgresEventStore.create(DSN, partitions=16)  # or RedisEventStore.create(URL, ...)
 bus = DistributedBus(store.bus_backend())
 async with Engine(store=store, bus=bus, sweep_interval_s=5) as eng:
-    LLMHandler(client).attach(eng); ToolHandler(registry).attach(eng); eng.register(ToolLoop(registry))
-    await asyncio.Event().wait()                                  # a worker
+    LLMHandler(client).attach(eng)
+    ToolHandler(registry).attach(eng)
+    eng.register(ToolLoop(registry))
+    await asyncio.Event().wait()  # a worker
 # anywhere else (API server, CLI): submit and observe only
 client = Engine(store=store, bus=ClientBus())
 outcome = await client.run(ToolLoop(registry), {"task": "..."})
@@ -106,6 +109,26 @@ ignored and the state is replayed from the log. Bump a projection's `version` if
   lost child announcements; without it a run with a deadline whose host died waits for its next event.
 - Tested with real separate OS processes and `SIGKILL` on Postgres and Redis; not yet load tested.
 
+## Scaling with run length
+A continuing LLM request stores only the *new* messages plus a pointer to the previous request
+(`conv: {prev, delta}`); algorithm state holds a request id, not the transcript. The LLM handler
+rebuilds the full transcript the provider needs from an in-memory cache, falling back to one pass
+over the run's log after a restart/failover/different worker. Tool-call idempotency is an O(1)
+`store.has(stream, id)` lookup. `scripts/bench_growth.py` (SQLite, fake LLM, ~400-byte tool results):
+
+| turns | log size before -> after | wall time before -> after |
+|---|---|---|
+| 50 | 999 KB -> 170 KB | 0.22 s -> 0.07 s |
+| 100 | 3,667 KB -> 337 KB | 1.17 s -> 0.14 s |
+| 200 | 14,032 KB -> 673 KB | 7.53 s -> 0.28 s |
+| 400 | (not measured) -> 1,344 KB | -> 0.56 s |
+
+Log size, state size and per-turn work are now constant per turn (doubling the turns doubles the
+totals). What is *not* reduced is the provider payload itself: each call must still send the whole
+transcript, so token cost per call grows with the conversation. Use provider prompt caching or
+summarization for very long conversations. Custom algorithms should build continuing requests with
+`llm_request(..., prev=<previous request id>)` and pass only the new messages.
+
 ## Live gateway smoke test
 `scripts/live_smoke.py` checks the library against a real OpenAI-compatible endpoint: completion +
 usage, streaming, structured output, native tool calls (also streamed), a full ToolLoop through the
@@ -122,7 +145,6 @@ against any hosted gateway (Portkey, Cloudflare, Vercel, Bifrost, Kong, MLflow, 
 base URLs and headers follow vendor docs and are covered only by mocked-transport tests.
 
 ## Known limitations
-- Each LLM request carries the full message list (quadratic log growth; claim-check bounds event size).
 - No sandboxed code-execution validator is shipped (deliberately).
 - Structured-output `strict` mode may need schema adjustments per provider.
 - Only a local Ollama has been tested live; hosted gateways are untested (see above).

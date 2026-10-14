@@ -162,3 +162,14 @@ async def test_many_concurrent_appends_keep_contiguous_order(store):
     assert [e.seq for e in log] == list(range(40)) and sorted(e.data["i"] for e in log) == list(
         range(40)
     )
+
+
+async def test_has_is_an_exact_per_stream_id_lookup(store):
+    await store.append("h1", [Event(id="a", type="x"), Event(id="b", type="x")])
+    await store.append("h2", [Event(id="c", type="x")])
+    assert await store.has("h1", "a") and await store.has("h1", "b") and await store.has("h2", "c")
+    assert (
+        not await store.has("h1", "c")
+        and not await store.has("h2", "a")
+        and not await store.has("nope", "a")
+    )

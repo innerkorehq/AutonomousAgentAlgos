@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from aaa.events import Event
 from aaa.llm.client import LLMClient
-from aaa.llm.errors import LLMError
+from aaa.llm.errors import FatalError, LLMError
 from aaa.llm.streaming import collect
-from aaa.llm.types import LLMRequest, LLMResponse
+from aaa.llm.types import LLMRequest, LLMResponse, Message
 from aaa.runtime import Engine
 
 REQUESTED = "aaa.llm.requested"
@@ -31,6 +33,11 @@ class LLMHandler:
     ) -> None:
         self.client, self.concurrency, self.emit_deltas = client, concurrency, emit_deltas
         self.engine: Engine | None = None
+        # request event id -> the conversation AFTER that request's reply. A continuing request
+        # (`conv.prev`) is resolved from here; a miss (restart, other process) rebuilds from the log.
+        self._convs: OrderedDict[str, list[Message]] = OrderedDict()
+        self.max_cached_conversations = 1024
+        self.rebuilds = 0
 
     def attach(self, engine: Engine) -> None:
         self.engine = engine
@@ -55,10 +62,60 @@ class LLMHandler:
 
         return await collect(gen())
 
+    # -- conversation reconstruction -------------------------------------------------------
+    def _remember(self, request_id: str, after_reply: list[Message], prev: str | None) -> None:
+        if prev:  # the chain advanced: the older snapshot of it is superseded
+            self._convs.pop(prev, None)
+        self._convs[request_id] = after_reply
+        while len(self._convs) > self.max_cached_conversations:
+            self._convs.popitem(last=False)
+
+    async def _rebuild(self, stream: str, prev: str) -> list[Message]:
+        """Reconstruct the conversation after `prev`'s reply from the run's log (cache miss)."""
+        assert self.engine
+        self.rebuilds += 1
+        requests: dict[str, Event] = {}
+        replies: dict[str, Event] = {}
+        for ev in await self.engine.store.read(stream):
+            if ev.type == REQUESTED:
+                requests[ev.id] = ev
+            elif ev.type == COMPLETED and ev.id.endswith(":result"):
+                replies[ev.id[: -len(":result")]] = ev
+        chain: list[Event] = []
+        cur: str | None = prev
+        while cur is not None:
+            if cur not in requests or cur not in replies:
+                raise FatalError(
+                    f"cannot rebuild conversation: request {cur} or its reply is not in the log"
+                )
+            chain.append(await self.engine.hydrate(requests[cur]))
+            cur = (chain[-1].data.get("conv") or {}).get("prev")
+        msgs: list[Message] = []
+        for r in reversed(chain):
+            conv = r.data.get("conv")
+            msgs = (
+                [*msgs, *(Message.model_validate(m) for m in conv["delta"])]
+                if conv
+                else [Message.model_validate(m) for m in r.data["request"]["messages"]]
+            )
+            reply = await self.engine.hydrate(replies[r.id])
+            msgs.append(LLMResponse.model_validate(reply.data["response"]).message)
+        return msgs
+
+    async def _transcript(self, e: Event, req: LLMRequest) -> list[Message]:
+        conv = e.data.get("conv")
+        if not conv:
+            return req.messages
+        base = self._convs.get(conv["prev"])
+        if base is None:
+            base = await self._rebuild(e.stream, conv["prev"])
+        return [*base, *(Message.model_validate(m) for m in conv["delta"])]
+
     async def handle(self, e: Event) -> list[Event]:
         tag = e.data.get("tag")
         try:
             req = LLMRequest.model_validate(e.data["request"])
+            req.messages = await self._transcript(e, req)
             resp = await self._run(e, req)
         except LLMError as exc:
             return [
@@ -77,6 +134,7 @@ class LLMHandler:
             ]
         for i, call in enumerate(resp.message.tool_calls):
             call.id = f"call_{e.id}_{i}"
+        self._remember(e.id, [*req.messages, resp.message], (e.data.get("conv") or {}).get("prev"))
         return [
             _result(
                 e,

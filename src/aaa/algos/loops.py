@@ -16,7 +16,7 @@ from aaa.tools import ToolRegistry
 
 class LoopState(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
-    messages: list[Message] = Field(default_factory=list)  # last request + assistant reply
+    request_id: str | None = None  # last `main` request: the next one continues from it
     turns: int = 0
     phase: str = "start"  # start | llm | tools | done
     round_calls: list[str] = Field(default_factory=list)
@@ -30,11 +30,10 @@ def apply(st: LoopState, e: Event) -> LoopState:
     if e.type == "aaa.run.started":
         st.input = d.get("input", {})
     elif e.type == "aaa.llm.requested" and d.get("tag") == "main":
-        st.messages = [Message.model_validate(m) for m in d["request"]["messages"]]
+        st.request_id = e.id
         st.phase, st.round_calls, st.results = "llm", [], {}
     elif e.type == "aaa.llm.completed" and d.get("tag") == "main":
         msg = LLMResponse.model_validate(d["response"]).message
-        st.messages.append(msg)
         st.turns += 1
         st.phase = "tools" if msg.tool_calls else "done"
         st.round_calls = [c.id for c in msg.tool_calls]
@@ -51,7 +50,7 @@ def apply(st: LoopState, e: Event) -> LoopState:
     return st
 
 
-LOOP = Projection(LoopState, apply, name="aaa.loop", version=1, state_type=LoopState)
+LOOP = Projection(LoopState, apply, name="aaa.loop", version=2, state_type=LoopState)
 
 
 class LLMLoop:
@@ -109,10 +108,10 @@ class LLMLoop:
             err = e.data["error"]
             return [finish(e, OutcomeKind.FAILED, reason=f"{err['type']}: {err['message']}")]
         if e.type == "aaa.llm.completed":
-            return self.on_reply(e, st, st.messages[-1])
+            return self.on_reply(e, st, LLMResponse.model_validate(e.data["response"]).message)
         # tool result: continue once every call of this round has resolved
         if st.phase == "tools" and st.round_calls and all(c in st.results for c in st.round_calls):
-            return [llm_request(e, self.request([*st.messages, *self.observations(st)]))]
+            return [llm_request(e, self.request(self.observations(st)), prev=st.request_id)]
         return []
 
     def _budget_exhausted(self, e: Event, st: LoopState) -> Event | None:
@@ -236,8 +235,8 @@ class ReAct(LLMLoop):
         return [tool_request(e, f"react-{e.id}", name, args)]
 
     def _feedback(self, e: Event, st: LoopState, text: str) -> Event:
-        msgs = [*st.messages, Message(role="user", content=f"Observation: {text}")]
-        return llm_request(e, self.request(msgs))
+        msgs = [Message(role="user", content=f"Observation: {text}")]
+        return llm_request(e, self.request(msgs), prev=st.request_id)
 
     def observations(self, st: LoopState) -> list[Message]:
         cid = st.round_calls[-1]

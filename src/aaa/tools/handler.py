@@ -55,12 +55,10 @@ class ToolHandler:
             id=f"{e.id}:result",
         )
 
-    async def _already_resolved(self, e: Event, call_id: str) -> bool:
+    async def _already_resolved(self, req: Event) -> bool:
+        """O(1): a request's result always has the deterministic id `<request id>:result`."""
         assert self.engine
-        return any(
-            x.type in (COMPLETED, FAILED) and x.data.get("call_id") == call_id
-            for x in await self.engine.store.read(e.stream)
-        )
+        return await self.engine.store.has(req.stream, f"{req.id}:result")
 
     async def _on_requested(self, e: Event) -> list[Event]:
         call_id, name = e.data["call_id"], e.data["name"]
@@ -75,7 +73,7 @@ class ToolHandler:
                     f"no tool named {name!r}; available: {self.registry.names()}",
                 )
             ]
-        if await self._already_resolved(e, call_id):
+        if await self._already_resolved(e):
             return []
         if t.requires_approval:
             return [
@@ -97,13 +95,13 @@ class ToolHandler:
     async def _on_granted(self, e: Event) -> list[Event]:
         req = await self._find_request(e, e.data["call_id"])
         t = self.registry.get(req.data["name"]) if req else None
-        if req and t and not await self._already_resolved(e, req.data["call_id"]):
+        if req and t and not await self._already_resolved(req):
             self._launch(req, t)
         return []
 
     async def _on_denied(self, e: Event) -> list[Event]:
         req = await self._find_request(e, e.data["call_id"])
-        if not req or await self._already_resolved(e, req.data["call_id"]):
+        if not req or await self._already_resolved(req):
             return []
         return [
             self._fail(

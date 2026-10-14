@@ -42,6 +42,10 @@ class EventStore(Protocol):
 
     async def last_seq(self, stream: str) -> int: ...
 
+    async def has(self, stream: str, event_id: str) -> bool:
+        """O(1) 'is this event id already in the stream?' (ids are unique per stream)."""
+        ...
+
     async def run_index(self) -> list[RunInfo]:
         """Every run's started event and (if any) completed event, for crash recovery."""
         ...
@@ -65,6 +69,9 @@ class InMemoryEventStore:
 
     async def last_seq(self, stream: str) -> int:
         return len(self._streams[stream]) - 1
+
+    async def has(self, stream: str, event_id: str) -> bool:
+        return event_id in self._ids[stream]
 
     async def append(
         self, stream: str, events: Sequence[Event], expected_seq: int = ANY_SEQ

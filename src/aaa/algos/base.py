@@ -9,8 +9,21 @@ from aaa.events import Event
 from aaa.llm.types import LLMRequest, Message
 
 
-def llm_request(parent: Event, req: LLMRequest, tag: str = "main") -> Event:
-    return parent.caused("aaa.llm.requested", {"request": req.model_dump(mode="json"), "tag": tag})
+def llm_request(
+    parent: Event, req: LLMRequest, tag: str = "main", *, prev: str | None = None
+) -> Event:
+    """Build an `aaa.llm.requested` event.
+
+    With `prev` (the id of the previous request event of the SAME conversation), `req.messages`
+    must hold only the messages appended since that request's reply; the event then stores just
+    that delta plus a pointer. The LLM handler reconstructs the full transcript the provider
+    needs, so the log (and algorithm state) grows linearly with turns, not quadratically."""
+    body = req.model_dump(mode="json")
+    data: dict[str, Any] = {"request": body, "tag": tag}
+    if prev is not None:
+        data["conv"] = {"prev": prev, "delta": body["messages"]}
+        body["messages"] = []
+    return parent.caused("aaa.llm.requested", data)
 
 
 def finish(parent: Event, kind: OutcomeKind, value: Any = None, reason: str | None = None) -> Event:

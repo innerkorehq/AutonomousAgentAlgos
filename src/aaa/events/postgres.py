@@ -190,6 +190,13 @@ class PostgresEventStore:
             )
         )
 
+    async def has(self, stream: str, event_id: str) -> bool:
+        return bool(
+            await self.pool.fetchval(
+                "SELECT 1 FROM aaa_events WHERE stream=$1 AND id=$2", stream, event_id
+            )
+        )
+
     async def subscribe(self, stream: str, from_seq: int = 0) -> AsyncIterator[Event]:
         pos, p = from_seq, partition_of(stream, self.partitions)
         while True:

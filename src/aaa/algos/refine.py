@@ -24,7 +24,7 @@ _CRITIC_SYSTEM = (
 
 class _S(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
-    messages: list[Message] = Field(default_factory=list)
+    request_id: str | None = None  # last `gen` request: a revision continues from it
     iterations: int = 0
     candidate: str = ""
 
@@ -34,15 +34,14 @@ def _apply(st: _S, e: Event) -> _S:
     if e.type == "aaa.run.started":
         st.input = d["input"]
     elif e.type == "aaa.llm.requested" and d.get("tag") == "gen":
-        st.messages = [Message.model_validate(m) for m in d["request"]["messages"]]
+        st.request_id = e.id
     elif e.type == "aaa.llm.completed" and d.get("tag") == "gen":
         msg = LLMResponse.model_validate(d["response"]).message
-        st.messages.append(msg)
         st.candidate, st.iterations = msg.content or "", st.iterations + 1
     return st
 
 
-REFINE = Projection(_S, _apply, name="aaa.refine", version=1, state_type=_S)
+REFINE = Projection(_S, _apply, name="aaa.refine", version=2, state_type=_S)
 
 
 class _Refine:
@@ -66,10 +65,10 @@ class _Refine:
     def subscriptions(self) -> list[str]:
         return ["aaa.run.started", "aaa.llm.completed", "aaa.llm.failed", "aaa.validate.completed"]
 
-    def _gen(self, e: Event, messages: list[Message]) -> Event:
-        return llm_request(
-            e, LLMRequest(model=self.model, messages=messages, params=self.params), "gen"
-        )
+    def _gen(self, e: Event, messages: list[Message], prev: str | None = None) -> Event:
+        """`prev` set => `messages` are only the NEW ones, continuing that request's conversation."""
+        req = LLMRequest(model=self.model, messages=messages, params=self.params)
+        return llm_request(e, req, "gen", prev=prev)
 
     def verify(self, e: Event, st: _S, candidate: str) -> Event:
         raise NotImplementedError
@@ -115,7 +114,7 @@ class _Refine:
             role="user",
             content=f"Your answer was rejected.\nFeedback: {fb}\nProduce a corrected, complete answer.",
         )
-        return [self._gen(e, [*st.messages, fix])]
+        return [self._gen(e, [fix], prev=st.request_id)]
 
 
 class GenerateTestRepair(_Refine):

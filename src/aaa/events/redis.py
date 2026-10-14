@@ -173,6 +173,10 @@ class RedisEventStore:
         rows = await self.r.xrevrange(self._k(p, "ev", stream), "+", "-", count=1)
         return int(_s(rows[0][0]).split("-")[0]) - 1 if rows else -1
 
+    async def has(self, stream: str, event_id: str) -> bool:
+        p = partition_of(stream, self.partitions)
+        return bool(await self.r.hexists(self._k(p, "ids", stream), event_id))
+
     async def subscribe(self, stream: str, from_seq: int = 0) -> AsyncIterator[Event]:
         p, pos = partition_of(stream, self.partitions), from_seq
         key = self._k(p, "ev", stream)

@@ -123,6 +123,15 @@ class SQLiteEventStore:
             ).fetchone()[0]
         )
 
+    async def has(self, stream: str, event_id: str) -> bool:
+        return bool(
+            await self._run(
+                lambda: self._conn.execute(
+                    "SELECT 1 FROM events WHERE stream=? AND id=?", (stream, event_id)
+                ).fetchone()
+            )
+        )
+
     def _run_index(self) -> list[RunInfo]:
         c = self._conn
         started = {
