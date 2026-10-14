@@ -88,6 +88,13 @@ class Tool:
         schema = _strip_titles(self.input_model.model_json_schema())
         self.parameters = schema
 
+    @property
+    def delivery(self) -> str | None:
+        """This tool's own delivery override (`at_least_once` / `at_most_once`), or None to inherit the
+        ToolHandler's default."""
+        g = self.guard
+        return g.get("delivery") if isinstance(g, dict) else getattr(g, "delivery", None)
+
     def spec(self) -> ToolSpec:
         return ToolSpec(name=self.name, description=self.description, parameters=self.parameters)
 

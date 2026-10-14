@@ -62,11 +62,11 @@ async def test_tools_become_aaa_tools_with_a_conservative_guard_policy(notes):
     tools = {t.name: t for t in await client.load_tools()}
     assert all(isinstance(t, SchemaTool) for t in tools.values())
     assert set(tools) >= {"notes__search_notes", "notes__delete_note"}
-    delivery = {n: t.guard.get("delivery") for n, t in tools.items()}
+    delivery = {n: t.delivery for n, t in tools.items()}
     assert delivery["notes__search_notes"] == "at_least_once"  # read-only: safe to repeat
     assert delivery["notes__set_title"] == "at_least_once"  # idempotent
     assert delivery["notes__delete_note"] == "at_most_once"  # no annotations: assume the worst
-    distrust = {t.name: t.guard.get("delivery") for t in client.tools(trust_annotations=False)}
+    distrust = {t.name: t.delivery for t in client.tools(trust_annotations=False)}
     assert set(distrust.values()) == {"at_most_once"}
 
 

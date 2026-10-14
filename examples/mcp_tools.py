@@ -59,9 +59,7 @@ async def main() -> None:
         async with MCPClient.stdio(sys.executable, [str(script)], name="weather") as weather:
             tools = await weather.load_tools(approval="destructive")  # a human approves risky tools
             for t in tools:
-                print(
-                    f"{t.name:24} delivery={t.guard.get('delivery'):13} approval={t.requires_approval}"
-                )
+                print(f"{t.name:24} delivery={t.delivery:13} approval={t.requires_approval}")
             registry = ToolRegistry(tools)
             async with Engine() as engine:
                 LLMHandler(FakeLLMClient(scripted_model)).attach(engine)
