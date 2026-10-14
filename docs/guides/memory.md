@@ -139,6 +139,16 @@ Supermemory needs none: it is plain HTTP.
     (`(root, tenant, user, agent, ...)`), so a tenant-wide search is a prefix search. Without an embedding index on the store, recall
     ranks by word overlap.
 
+=== "MCP server"
+
+    ```python
+    from aaa.mcp import MCPClient, mcp_memory
+
+    memory = mcp_memory(srv, add="add_memory", search="search_memory")   # tool names from `srv.list_tools()`
+    ```
+
+    Any memory service with an MCP server works without an adapter; see [MCP](mcp.md#mcp-memory-servers).
+
 === "Anything else"
 
     ```python

@@ -109,6 +109,72 @@ class Tool:
         return to_jsonable_python(result)
 
 
+def validate_arguments(schema: dict[str, Any], arguments: dict[str, Any]) -> list[str]:
+    """Check `arguments` against a JSON Schema; returns human-readable problems (empty = valid).
+    Uses `jsonschema` when installed (it is, with the `mcp` extra); otherwise a conservative subset:
+    required keys, unknown keys when `additionalProperties` is false, and primitive types."""
+    try:
+        from jsonschema import validators  # pyright: ignore[reportMissingModuleSource]
+    except ImportError:
+        validators = None
+    if validators is not None:
+        validator = validators.validator_for(schema)
+        return [
+            f"{'.'.join(map(str, e.absolute_path)) or 'arguments'}: {e.message}"
+            for e in sorted(
+                validator(schema).iter_errors(arguments), key=lambda e: list(e.absolute_path)
+            )
+        ]
+    problems: list[str] = []
+    props = schema.get("properties") or {}
+    problems += [
+        f"{k}: is a required property" for k in schema.get("required", []) if k not in arguments
+    ]
+    if schema.get("additionalProperties") is False:
+        problems += [f"{k}: unexpected argument" for k in arguments if k not in props]
+    kinds = {
+        "string": str,
+        "integer": int,
+        "number": (int, float),
+        "boolean": bool,
+        "array": list,
+        "object": dict,
+    }
+    for k, v in arguments.items():
+        want = (props.get(k) or {}).get("type")
+        if isinstance(want, str) and want in kinds and not isinstance(v, kinds[want]):
+            problems.append(f"{k}: expected {want}")
+    return problems
+
+
+class SchemaTool(Tool):
+    """A tool defined by an explicit JSON Schema and an async callable taking the argument dict,
+    instead of a Python signature. This is how tools that arrive from outside Python (MCP servers,
+    OpenAPI operations, ...) join a `ToolRegistry`; they get the same argument validation,
+    approval, timeout and execution-guard behavior as `@tool` functions."""
+
+    def __init__(
+        self,
+        call: Callable[[dict[str, Any]], Any],
+        *,
+        name: str,
+        description: str,
+        parameters: dict[str, Any],
+        **opts: Any,
+    ) -> None:
+        async def _unused() -> None: ...
+
+        super().__init__(_unused, name=name, description=description, **opts)
+        self.fn = call
+        self.parameters = _strip_titles(parameters or {"type": "object", "properties": {}})
+
+    async def invoke(self, arguments: dict[str, Any], ctx: ToolContext | None = None) -> Any:
+        if problems := validate_arguments(self.parameters, arguments):
+            raise ToolArgsError(f"invalid arguments for {self.name}: {'; '.join(problems)}")
+        result = self.fn(arguments)
+        return to_jsonable_python(await result if inspect.isawaitable(result) else result)
+
+
 def tool(fn: Callable[..., Any] | None = None, **opts: Any) -> Any:
     """Decorator: `@tool` or `@tool(requires_approval=True)`. Schema comes from type hints,
     description from the docstring."""

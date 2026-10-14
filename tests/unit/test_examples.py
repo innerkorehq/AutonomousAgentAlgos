@@ -81,12 +81,18 @@ EXPECTED = {
         "forgot: {'NativeMemory': 1}",
         "ann after forgetting: Which cuisine do you like?",
     ],
+    "mcp_tools.py": [
+        "weather__forecast        delivery=at_least_once approval=False",
+        "weather__reset_station   delivery=at_most_once  approval=True",
+        "The forecast says: Lisbon: sunny for the next 3 days",
+    ],
     "ensembles.py": [
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
 }
 COMPILE_ONLY = {"cluster_worker.py", "cluster_client.py"}
+OPTIONAL_DEPS = {"mcp_tools.py": "mcp"}  # skipped where the optional package is not installed
 
 
 def test_every_example_is_accounted_for():
@@ -96,6 +102,8 @@ def test_every_example_is_accounted_for():
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_example_runs_and_prints_what_the_docs_say(name):
+    if dep := OPTIONAL_DEPS.get(name):
+        pytest.importorskip(dep)
     proc = subprocess.run(
         [sys.executable, "-I", str(EXAMPLES / name)],
         check=False,

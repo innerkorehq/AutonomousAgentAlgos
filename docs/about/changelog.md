@@ -2,6 +2,13 @@
 
 ## 0.1.0 (unreleased)
 
+**MCP client** (see [the guide](../guides/mcp.md))
+
+- `aaa.mcp.MCPClient`: connect to any MCP server over stdio, Streamable HTTP, or your own open `Client`/`ClientSession`, and use its tools as AAA tools (`SchemaTool`: argument validation against the server's JSON Schema, timeouts, approval, execution guard). Works with both the 1.x and 2.x `mcp` SDK.
+- Safety policy from MCP annotations: read-only/idempotent tools are `at_least_once`, everything else `at_most_once`; `approval="destructive"` follows the spec's "no annotations means destructive"; `trust_annotations=False`, `include`/`exclude`, result truncation.
+- `mcp_memory(client, add=..., search=...)`: any MCP memory server as an AAA `Memory`. Resources can be listed and read.
+- Tested against real SDK servers in-process, over stdio and over HTTP with credentials, on both SDK versions in CI.
+
 **Long-term memory** (see [the guide](../guides/memory.md))
 
 - `aaa.memory`: a small `Memory` protocol (`add`, `search`) with optional capabilities (`Updatable`, `Deletable`, `Forgettable`, `Profiled`, `Listable`) and a tenant/user/agent `Scope`.

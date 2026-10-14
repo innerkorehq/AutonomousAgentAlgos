@@ -80,6 +80,7 @@ nav:
   - Guides:
       - LLM gateways: guides/llm-gateways.md
       - Tools: guides/tools.md
+      - MCP servers: guides/mcp.md
       - Human approval: guides/human-approval.md
       - Streaming: guides/streaming.md
       - Algorithms:
@@ -115,6 +116,7 @@ nav:
           - Tools: reference/api/tools.md
           - LLM: reference/api/llm.md
           - Data: reference/api/data.md
+          - MCP: reference/api/mcp.md
           - Memory: reference/api/memory.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md

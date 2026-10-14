@@ -90,10 +90,14 @@ jobs:
           enable-cache: true
       - name: Locked versions
         run: |
-          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem
-          uv run pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py
+          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem --extra mcp
+          uv run pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_examples.py -k "not cluster"
+      - name: MCP SDK 1.x (the lock resolves 2.x; both are supported)
+        run: |
+          uv pip install "mcp<2"
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_mcp.py
       - name: Newest releases (scheduled and manual runs only)
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         run: |
-          uv pip install --upgrade mem0ai graphiti-core langgraph langmem
-          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py
+          uv pip install --upgrade mem0ai graphiti-core langgraph langmem mcp
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py tests/unit/test_mcp.py
