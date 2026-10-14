@@ -63,6 +63,27 @@ installed; set `AAA_TEST_PG_BIN` if they are off `PATH`). Without them those tes
     2. Verify the URL and header names against the vendor's documentation and cite the page in the docstring.
     3. Add a mocked-transport test, and say in the docs whether you verified it live.
 
+## Releasing (maintainers)
+
+Releases go to PyPI through **Trusted Publishing** (OIDC): the `release` workflow proves its identity to PyPI, so no API token
+is stored in the repository.
+
+**One-time setup**
+
+1. On PyPI, add a *pending publisher* (Account → Publishing): project `autonomous-agent-algos`, owner `innerkorehq`, repository
+   `AutonomousAgentAlgos`, workflow `release.yml`, environment `pypi`. Repeat on TestPyPI with environment `testpypi` if you want dry runs.
+2. In the GitHub repository, create the environments `pypi` and `testpypi` (Settings → Environments). Add a required reviewer to `pypi`
+   so a publish needs a human click.
+
+**Each release**
+
+1. Set `version` in `pyproject.toml`, run `uv lock`, and give the changelog entry its date. Merge to `master`.
+2. Optional dry run: Actions → *release* → *Run workflow* publishes the build to TestPyPI.
+3. Create a GitHub Release tagged `vX.Y.Z` (same number as `pyproject.toml`; the workflow refuses a mismatch). The workflow builds,
+   runs `twine check --strict`, installs the wheel in a clean environment and runs the quickstart, repeats the full test suite
+   against Postgres and Redis, and then publishes.
+4. A published version can never be replaced; if one is bad, *yank* it on PyPI and release the next number.
+
 ## Pull requests
 
 Describe the problem, the approach, and how you verified it. Keep changes focused. CI for docs runs on merge to `master`; run the suite locally before opening a PR.

@@ -210,4 +210,4 @@ base URLs and headers follow vendor docs and are covered only by mocked-transpor
 
 ## License
 
-[MIT](LICENSE) © 2026 Innerkore Technologies.
+[MIT](https://github.com/innerkorehq/AutonomousAgentAlgos/blob/master/LICENSE) © 2026 Innerkore Technologies.

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.0.1 (unreleased)
+## 0.1.0 (unreleased)
 
 **Privacy: tenancy, redaction, retention** (see [the guide](../guides/privacy.md))
 
