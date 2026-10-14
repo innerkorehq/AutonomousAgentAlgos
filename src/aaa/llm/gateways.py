@@ -10,7 +10,9 @@ from aaa.llm.config import LLMConfig
 
 
 def litellm_proxy(model: str, base_url: str = "http://localhost:4000/v1", **kw: Any) -> LLMConfig:
-    return LLMConfig(model=model, base_url=base_url, api_key="${LITELLM_API_KEY}", **kw)
+    return LLMConfig(
+        model=model, base_url=base_url, api_key=kw.pop("api_key", "${LITELLM_API_KEY}"), **kw
+    )
 
 
 def bifrost(model: str, base_url: str = "http://localhost:8080/v1", **kw: Any) -> LLMConfig:
@@ -52,7 +54,9 @@ def cloudflare(
 
 def vercel(model: str, base_url: str = "https://ai-gateway.vercel.sh/v1", **kw: Any) -> LLMConfig:
     """Model is 'creator/model' (case-sensitive), e.g. 'anthropic/claude-sonnet-4.5'."""
-    return LLMConfig(model=model, base_url=base_url, api_key="${AI_GATEWAY_API_KEY}", **kw)
+    return LLMConfig(
+        model=model, base_url=base_url, api_key=kw.pop("api_key", "${AI_GATEWAY_API_KEY}"), **kw
+    )
 
 
 def kong(model: str, route_url: str, **kw: Any) -> LLMConfig:

@@ -1,0 +1,123 @@
+site_name: AutonomousAgentAlgos (AAA)
+site_description: Async, event-driven library of production-deployable agent algorithms over arbitrary data, with a pluggable LLM gateway layer.
+site_url: https://innerkorehq.github.io/AutonomousAgentAlgos/
+repo_url: https://github.com/innerkorehq/AutonomousAgentAlgos
+repo_name: innerkorehq/AutonomousAgentAlgos
+edit_uri: edit/master/docs/
+copyright: Copyright &copy; 2026 Innerkore Technologies &middot; MIT License
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle: {icon: material/weather-night, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle: {icon: material/weather-sunny, name: Switch to light mode}
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.details
+  - pymdownx.highlight: {anchor_linenums: true}
+  - pymdownx.inlinehilite
+  - pymdownx.snippets: {base_path: ["."], check_paths: true}
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed: {alternate_style: true}
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: false
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            merge_init_into_class: true
+            heading_level: 3
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - The mental model: getting-started/mental-model.md
+  - Concepts:
+      - Architecture: concepts/architecture.md
+      - Events and the log: concepts/events-and-the-log.md
+      - Runs and the engine: concepts/runs-and-the-engine.md
+      - Data model: concepts/data-model.md
+      - Projections and snapshots: concepts/projections-and-snapshots.md
+      - Delivery and idempotency: concepts/delivery-and-idempotency.md
+  - Guides:
+      - LLM gateways: guides/llm-gateways.md
+      - Tools: guides/tools.md
+      - Human approval: guides/human-approval.md
+      - Streaming: guides/streaming.md
+      - Algorithms:
+          - Choosing an algorithm: guides/algorithms/index.md
+          - ToolLoop and ReAct: guides/algorithms/tool-loop-react.md
+          - PlanAndExecute: guides/algorithms/plan-and-execute.md
+          - Router and Supervisor: guides/algorithms/router-supervisor.md
+          - Generate-test-repair and critic: guides/algorithms/refine.md
+          - WorkflowGraph and FSM: guides/algorithms/workflow-fsm.md
+          - SelfConsistency and RAG: guides/algorithms/ensembles-rag.md
+          - Writing your own: guides/algorithms/custom.md
+      - Persistence and recovery: guides/persistence.md
+      - Running a cluster: guides/clusters.md
+      - The tool execution guard: guides/tool-guard.md
+      - Large payloads: guides/large-payloads.md
+      - Testing your agents: guides/testing.md
+      - Extending AAA: guides/extending.md
+  - Operations:
+      - Deployment checklist: operations/deployment.md
+      - Configuration reference: operations/configuration.md
+      - Performance and scaling: operations/performance.md
+      - Security: operations/security.md
+      - Troubleshooting: operations/troubleshooting.md
+  - Reference:
+      - Event catalog: reference/event-catalog.md
+      - Outcomes and errors: reference/outcomes-and-errors.md
+      - API:
+          - reference/api/index.md
+          - Runtime: reference/api/runtime.md
+          - Algorithms: reference/api/algos.md
+          - Tools: reference/api/tools.md
+          - LLM: reference/api/llm.md
+          - Data: reference/api/data.md
+          - Events: reference/api/events.md
+          - Validation and core: reference/api/core.md
+  - About:
+      - Status and limitations: about/limitations.md
+      - Design decisions: about/design-decisions.md
+      - Contributing: about/contributing.md
+      - Changelog: about/changelog.md
+      - License: about/license.md

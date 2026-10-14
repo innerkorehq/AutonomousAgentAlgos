@@ -198,3 +198,19 @@ async def test_budget_stops_toolloop_and_rag_tool():
         setup(eng, FakeLLMClient(lambda r: tool_call("search_documents", query="x")), reg)
         out = await eng.run(ToolLoop(reg, max_turns=99), {"task": "x"}, budget=Budget(max_steps=6))
     assert out.kind is OutcomeKind.BUDGET_EXCEEDED
+
+
+async def test_toolloop_stream_option_emits_deltas_and_gives_the_same_answer():
+    reg = ToolRegistry([add])
+
+    def script(req):
+        m = req.messages[-1]
+        return tool_call("add", a=2, b=3) if m.role == "user" else text(f"the sum is {m.content}")
+
+    async with Engine() as eng:
+        setup(eng, FakeLLMClient(script), reg)
+        h = await eng.start(ToolLoop(reg, stream=True), {"task": "2+3"})
+        out = await h.result()
+        log = await eng.store.read(h.run_id)
+    deltas = "".join(e.data["text"] for e in log if e.type == "aaa.llm.delta")
+    assert out.ok and out.value["text"] == "the sum is 5" and deltas == "the sum is 5"

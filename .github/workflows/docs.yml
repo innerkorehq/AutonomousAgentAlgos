@@ -1,0 +1,63 @@
+name: docs
+
+# Builds the documentation (strictly) and publishes it to GitHub Pages on every push to master that
+# touches the docs, the examples they embed, the source their API reference is generated from, or
+# this workflow. A broken example or an invalid fragment blocks publishing.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "docs/**"
+      - "examples/**"
+      - "src/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "LICENSE"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install (docs extra + dev group)
+        run: uv sync --extra docs --frozen
+
+      - name: Every embedded example runs, and every inline fragment is valid Python
+        run: uv run pytest -q -p no:cacheprovider tests/unit/test_examples.py tests/unit/test_docs_snippets.py
+
+      - name: "Build (strict - warnings fail the build)"
+        run: uv run mkdocs build --strict
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

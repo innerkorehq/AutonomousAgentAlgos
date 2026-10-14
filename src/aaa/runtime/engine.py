@@ -16,6 +16,7 @@ from aaa.core.outcome import Outcome, OutcomeKind
 from aaa.data.blob import BlobStore
 from aaa.events import (
     Event,
+    EventBus,
     EventStore,
     Handler,
     InMemoryEventStore,
@@ -178,7 +179,7 @@ class Engine:
     def __init__(
         self,
         store: EventStore | None = None,
-        bus: InProcessBus | None = None,
+        bus: EventBus | None = None,
         schemas: SchemaRegistry | None = None,
         default_budget: Budget | None = None,
         blobs: BlobStore | None = None,

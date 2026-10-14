@@ -2,6 +2,21 @@
 name = "autonomous-agent-algos"
 version = "0.0.1"
 description = "Async, event-driven library of production-deployable agent algorithms over arbitrary data."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Innerkore Technologies" }]
+keywords = ["agents", "llm", "asyncio", "event-sourcing", "workflow", "tool-calling", "react", "planning"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7", "anyio>=4.4", "httpx>=0.27"]
 
@@ -9,6 +24,13 @@ dependencies = ["pydantic>=2.7", "anyio>=4.4", "httpx>=0.27"]
 litellm = ["litellm"]
 postgres = ["asyncpg>=0.29"]
 redis = ["redis>=5.0"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
+
+[project.urls]
+Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
+Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/"
+Source = "https://github.com/innerkorehq/AutonomousAgentAlgos"
+Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff", "pyright", "asyncpg>=0.29", "redis>=5.0"]
@@ -27,3 +49,5 @@ anyio_mode = "auto"
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+# Recent ruff also formats Python blocks inside Markdown, which mangles the docs' `--8<--` embed markers.
+extend-exclude = ["*.md", "docs", "site"]

@@ -69,10 +69,12 @@ class LLMLoop:
         params: dict[str, Any] | None = None,
         tool_names: list[str] | None = None,
         name: str | None = None,
+        stream: bool = False,
     ) -> None:
         if name:
             self.name = name
         self.tools, self.system, self.model = tools, system, model
+        self.stream = stream  # ask the LLM handler to stream (emits aaa.llm.delta events)
         self.max_turns, self.params, self.tool_names = max_turns, params or {}, tool_names
 
     def subscriptions(self) -> list[str]:
@@ -89,7 +91,9 @@ class LLMLoop:
         return task_messages(inp, self.system)
 
     def request(self, messages: list[Message]) -> LLMRequest:
-        return LLMRequest(model=self.model, messages=messages, params=self.params)
+        return LLMRequest(
+            model=self.model, messages=messages, params=self.params, stream=self.stream
+        )
 
     def on_reply(self, e: Event, st: LoopState, msg: Message) -> list[Event]:
         raise NotImplementedError

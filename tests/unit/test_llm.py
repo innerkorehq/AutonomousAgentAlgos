@@ -303,3 +303,11 @@ async def test_handler_streams_deltas_and_wrappers_forward_stream():
     assert "".join(deltas) == "one two three" and len(deltas) == 3
     done = next(e for e in log if e.type == "aaa.llm.completed")
     assert done.data["response"]["message"]["content"] == "one two three"
+
+
+def test_presets_accept_an_api_key_override_including_none():
+    assert gateways.litellm_proxy("m", api_key=None).api_key is None  # unauthenticated local proxy
+    assert gateways.litellm_proxy("m", api_key="${MY_KEY}").api_key == "${MY_KEY}"
+    assert gateways.litellm_proxy("m").api_key == "${LITELLM_API_KEY}"  # default unchanged
+    assert gateways.vercel("openai/gpt-5-mini", api_key="${OTHER}").api_key == "${OTHER}"
+    assert gateways.vercel("openai/gpt-5-mini").api_key == "${AI_GATEWAY_API_KEY}"

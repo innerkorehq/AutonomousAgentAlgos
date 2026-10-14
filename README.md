@@ -3,6 +3,11 @@
 Async, **event-driven** library of production-deployable agent algorithms that run over
 **arbitrary user data**, with a pluggable LLM gateway layer.
 
+**Documentation: <https://innerkorehq.github.io/AutonomousAgentAlgos/>** — quickstart, concepts, guides for every
+algorithm, clustering, the tool execution guard, operations, security, API reference, and an honest
+[status and limitations](https://innerkorehq.github.io/AutonomousAgentAlgos/about/limitations/) page.
+The README below is a condensed overview; the docs are the reference.
+
 ```python
 async with Engine() as eng:
     LLMHandler(build_client(gateways.portkey("gpt-4o"))).attach(eng)
@@ -202,3 +207,7 @@ base URLs and headers follow vendor docs and are covered only by mocked-transpor
 - No sandboxed code-execution validator is shipped (deliberately).
 - Structured-output `strict` mode may need schema adjustments per provider.
 - Only a local Ollama has been tested live; hosted gateways are untested (see above).
+
+## License
+
+[MIT](LICENSE) © 2026 Innerkore Technologies.
