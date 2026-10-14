@@ -5,6 +5,7 @@ import logging
 import time
 from typing import Any
 
+from aaa.core.aio import raise_if_cancelling, wait_for
 from aaa.core.retry import RetryPolicy
 from aaa.events import Event
 from aaa.events.bus import defer_ack
@@ -328,6 +329,7 @@ class ToolHandler:
         last_ok = time.monotonic()
         while True:
             await asyncio.sleep(cfg.beat)
+            raise_if_cancelling()
             try:
                 if not await self._exec_guard.renew(lease, cfg.lease_ttl_s):
                     lost.set()
@@ -353,9 +355,7 @@ class ToolHandler:
                     fence=attempt,
                     idempotency_key=self._idempotency_key(req, t),
                 )
-                result = await asyncio.wait_for(
-                    t.invoke(req.data.get("arguments") or {}, ctx), t.timeout_s
-                )
+                result = await wait_for(t.invoke(req.data.get("arguments") or {}, ctx), t.timeout_s)
             return req.caused(
                 COMPLETED,
                 {"call_id": call_id, "name": t.name, "result": result},

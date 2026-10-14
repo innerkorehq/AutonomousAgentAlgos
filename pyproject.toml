@@ -51,3 +51,10 @@ line-length = 100
 src = ["src", "tests"]
 # Recent ruff also formats Python blocks inside Markdown, which mangles the docs' `--8<--` embed markers.
 extend-exclude = ["*.md", "docs", "site"]
+
+[tool.pyright]
+# Gate the library, the documented examples and the scripts. Tests are not type-checked: they use
+# duck-typed doubles (flaky stores, frozen backends) and deliberately pass invalid arguments.
+include = ["src", "examples", "scripts"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"

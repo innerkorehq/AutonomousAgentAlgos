@@ -38,9 +38,14 @@ class MyClient:
     def __init__(self, config: LLMConfig) -> None:
         self.config = config
 
-    async def complete(self, request): ...
-    async def embed(self, texts, model=None): ...
-    async def aclose(self): ...
+    async def complete(self, request):
+        raise NotImplementedError  # call your backend, return an LLMResponse
+
+    async def embed(self, texts, model=None):
+        raise NotImplementedError
+
+    async def aclose(self) -> None:
+        return None
 
 
 register_provider("mine", MyClient)

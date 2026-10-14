@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Protocol, Self
 
+from aaa.core.aio import wait_event
 from aaa.core.errors import Redeliver
 from aaa.events.event import Event
 from aaa.events.guard import ExecutionGuard, LocalGuard
@@ -67,6 +68,10 @@ Handler = Callable[[Event], Awaitable[Iterable[Event] | None]]
 
 
 class EventBus(Protocol):
+    """What the Engine needs from a bus (InProcessBus, DistributedBus and ClientBus all conform)."""
+
+    distributed: bool
+
     async def publish(self, event: Event) -> None: ...
 
     def subscribe(
@@ -78,6 +83,20 @@ class EventBus(Protocol):
         concurrency: int = 1,
         predicate: Callable[[Event], bool] | None = None,
     ) -> None: ...
+
+    async def __aenter__(self) -> Self: ...
+
+    async def __aexit__(self, *exc: object) -> None: ...
+
+    async def abort(self) -> None:
+        """Hard stop that models a crash: nothing drained, nothing released."""
+        ...
+
+    def execution_guard(self) -> ExecutionGuard: ...
+
+    async def drain(self) -> None:
+        """Wait until everything currently queued has been handled."""
+        ...
 
 
 @dataclass
@@ -95,6 +114,8 @@ class InProcessBus:
     concurrency=1 preserves publish order per subscription. Handler exceptions are
     logged and isolated: one bad handler never kills the bus or other subscribers.
     Subscriptions sharing a `group` compete for events (one delivery per group)."""
+
+    distributed = False
 
     def __init__(
         self,
@@ -219,14 +240,9 @@ class InProcessBus:
                 log.warning(
                     "redelivering %s (attempt %d, in %.1fs): %s", event.type, attempt, delay, r
                 )
-                try:
-                    await asyncio.wait_for(
-                        self._closing.wait(), delay * (0.5 + random.random() / 2)
-                    )
+                if await wait_event(self._closing, delay * (0.5 + random.random() / 2)):
                     log.error("bus closing; %s dropped while waiting to be redelivered", event.type)
                     return
-                except TimeoutError:
-                    continue
             except Exception:
                 log.exception("handler failed for %s", event.type)
                 return
@@ -253,6 +269,9 @@ class ClientBus:
 
     async def abort(self) -> None:
         return None
+
+    def execution_guard(self) -> ExecutionGuard:
+        return LocalGuard()
 
     async def drain(self, timeout: float = 0) -> None:
         return None

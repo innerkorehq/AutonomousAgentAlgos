@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Any, Generic, Protocol, TypeVar, cast, runtime_checkable
 
 from pydantic import TypeAdapter
 
@@ -82,7 +82,9 @@ class CodecRegistry:
         is_codec = isinstance(codec_or_type, (TypeAdapterCodec, FunctionCodec)) or (
             not isinstance(codec_or_type, type) and isinstance(codec_or_type, Codec)
         )
-        self._by_kind[kind] = codec_or_type if is_codec else TypeAdapterCodec(codec_or_type)
+        self._by_kind[kind] = (
+            cast("Codec[Any]", codec_or_type) if is_codec else TypeAdapterCodec(codec_or_type)
+        )
 
     def get(self, kind: str) -> Codec[Any]:
         try:

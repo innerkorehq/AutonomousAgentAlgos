@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from aaa.core.aio import wait_for
 from aaa.core.errors import ConcurrencyError
 from aaa.events.event import Event
 from aaa.events.snapshot import StoredSnapshot
@@ -159,7 +160,7 @@ class SQLiteEventStore:
             if not batch:
                 try:
                     async with self._condition():
-                        await asyncio.wait_for(self._condition().wait(), self._poll)
+                        await wait_for(self._condition().wait(), self._poll)
                 except TimeoutError:
                     pass
                 continue

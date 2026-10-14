@@ -29,6 +29,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol, Self, runtime_checkable
 
+from aaa.core.aio import raise_if_cancelling, wait_event
+from aaa.core.aio import wait_for as cancel_safe_wait_for
 from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.events.bus import DeliverySlot, Handler, current_delivery
@@ -105,7 +107,7 @@ class MemoryBusBackend:
         async with cond:
             if len(self._log[partition]) <= after and wait_s > 0:
                 try:
-                    await asyncio.wait_for(
+                    await cancel_safe_wait_for(
                         cond.wait_for(lambda: len(self._log[partition]) > after), wait_s
                     )
                 except TimeoutError:
@@ -306,17 +308,15 @@ class DistributedBus:
         return {g: sorted(ps) for g, ps in out.items()}
 
     async def _manage(self) -> None:
-        while True:
+        while self._running:
+            raise_if_cancelling()
             try:
                 await self._rebalance()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("bus rebalance failed")
-            try:
-                await asyncio.wait_for(self._wake.wait(), self.tick_s)
-            except TimeoutError:
-                pass
+            await wait_event(self._wake, self.tick_s)
             self._wake.clear()
 
     async def _rebalance(self) -> None:
@@ -446,6 +446,7 @@ class DistributedBus:
                 await slot.deferral.wait()
 
         while True:
+            raise_if_cancelling()  # see aaa.core.aio: a swallowed cancel must still end this loop
             try:
                 entries = await self.backend.read(c.partition, c.read_upto, self.batch, self.poll_s)
                 for eid, ev in entries:
@@ -476,6 +477,7 @@ class DistributedBus:
                 except Exception:  # noqa: BLE001 - keep the reader alive through an outage
                     await asyncio.sleep(self._redeliver_delay(1))
             while True:
+                raise_if_cancelling()
                 try:
                     batch = await self.backend.read(p, cur, self.batch, self.poll_s)
                 except asyncio.CancelledError:

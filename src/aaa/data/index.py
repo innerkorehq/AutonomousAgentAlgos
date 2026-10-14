@@ -107,8 +107,9 @@ class InMemoryIndex:
             ]
         if len(ranked) == 1:
             return [Hit(doc=self._docs[i], score=kw[i]) for i in ranked["kw"][:k]]
-        fused: Counter[str] = Counter()
+        fused: dict[str, float] = {}
         for order in ranked.values():
             for rank, i in enumerate(order):
-                fused[i] += 1 / (60 + rank)
-        return [Hit(doc=self._docs[i], score=s) for i, s in fused.most_common(k)]
+                fused[i] = fused.get(i, 0.0) + 1 / (60 + rank)
+        best = sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:k]
+        return [Hit(doc=self._docs[i], score=s) for i, s in best]

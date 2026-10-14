@@ -18,7 +18,7 @@ class _Wrapper:
         # Streaming passes straight through (no retry/breaker once bytes may have been seen);
         # absent on the inner client => absent here, so capability checks stay truthful.
         if name == "stream":
-            return self.inner.stream
+            return getattr(self.inner, "stream")  # noqa: B009 - must raise AttributeError when absent
         raise AttributeError(name)
 
     async def embed(self, texts: list[str], model: str | None = None) -> EmbedResponse:

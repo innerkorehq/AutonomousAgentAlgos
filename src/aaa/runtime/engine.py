@@ -11,6 +11,7 @@ from typing import Any, Protocol, Self, TypeVar
 
 from pydantic import BaseModel, Field
 
+from aaa.core.aio import raise_if_cancelling
 from aaa.core.errors import Redeliver
 from aaa.core.ids import new_id
 from aaa.core.outcome import Outcome, OutcomeKind
@@ -98,7 +99,8 @@ class Ctx:
     async def history(self, from_seq: int = 0) -> list[Event]:
         """The run's events with any claim-checked payloads restored."""
         assert self.run_id
-        raw = await self.engine.retry(lambda: self.engine.store.read(self.run_id, from_seq), "read")
+        rid = self.run_id
+        raw = await self.engine.retry(lambda: self.engine.store.read(rid, from_seq), "read")
         return [await self.engine.hydrate(e) for e in raw]
 
     async def project(self, projection: Projection[S]) -> S:
@@ -123,7 +125,9 @@ class Algorithm(Protocol):
         """Event-type glob patterns this algorithm reacts to."""
         ...
 
-    async def on_event(self, event: Event, ctx: Ctx) -> list[Event]: ...
+    async def on_event(self, event: Event, ctx: Ctx, /) -> list[Event]:
+        # positional-only so implementations may name the parameters anything (`e`, `evt`, ...)
+        ...
 
 
 class RunHandle:
@@ -683,6 +687,7 @@ class Engine:
     async def _sweep_loop(self) -> None:
         while True:
             await asyncio.sleep(self.sweep_interval_s or 5)
+            raise_if_cancelling()
             try:
                 await self.sweep()
             except Exception:

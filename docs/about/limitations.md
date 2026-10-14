@@ -7,6 +7,7 @@ whether it fits your use.
 
 | Claim | Evidence |
 |---|---|
+| Type-correct public API | `pyright` (basic mode) reports 0 errors over the library, the examples and the scripts, in CI. The tests are not type-checked. |
 | Core engine, algorithms, tools, projections, snapshots | Unit and integration tests (280+); every doc example is executed by the suite. |
 | Four event stores obey one contract | One parametrized contract suite runs against memory, SQLite, Postgres and Redis (real servers, started on random ports). |
 | Distributed bus: ordering, exactly-once competing consumers, broadcast, failover, rebalancing, durable ack | The same bus scenarios run against memory, Postgres and Redis backends. |
@@ -23,7 +24,6 @@ whether it fits your use.
 - **Algorithms against a real model:** `ReAct`, `Router`, `Supervisor`, `SelfConsistency`, `GeneratorCritic` and `RAGAgent` are tested with scripted models,
   not live ones.
 - **Redis Cluster** (the key layout is cluster-safe by design; only a single node was tested) and **managed Postgres/Redis failover**.
-- **Type checking.** `pyright` is a dev dependency but has not been run over the code.
 
 ### Verify a hosted gateway yourself
 
@@ -88,13 +88,13 @@ raise `StoreUnavailable` to the caller after the budget so your API can answer 5
 | **Classical planning algorithms** | HTN, A\*/heuristic search over a user-defined domain, PDDL/CP-SAT/MILP solver adapters, MCTS. Deliberately deferred; the data contract for them was designed but not implemented. |
 | **Vector database and S3 adapters** | `Index` and `BlobStore` are protocols; only in-memory (and file blobs) ship. |
 | **Prompt-caching and summarization helpers** | The remaining cost driver in long conversations. |
-| **CI test workflow, PyPI release, versioned docs** | Docs are published automatically; the test suite is run locally. |
+| **PyPI release, versioned docs** | Docs are published automatically and the test suite runs in CI; the package is not on PyPI yet. |
 
 Not planned unless demand appears: reinforcement-learning policies, POMDP solvers, evolutionary search, distributed consensus
 (DCOP). They are production-viable in specific domains but are poor defaults for LLM-agent workloads.
 
 ## Compatibility
 
-- Python 3.11, 3.12 (tested on 3.12; the code uses no 3.12-only features).
+- Python 3.11 and 3.12, both exercised by the full test suite in CI. (3.11 needed two hardening fixes for cancellation; see the changelog.)
 - Postgres 14+ is expected to work (tested on 18); Redis 6.2+ (Streams, Lua; tested on 8).
 - Anything speaking the OpenAI chat-completions dialect.

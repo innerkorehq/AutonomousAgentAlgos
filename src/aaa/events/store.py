@@ -50,6 +50,10 @@ class EventStore(Protocol):
         """Every run's started event and (if any) completed event, for crash recovery."""
         ...
 
+    async def aclose(self) -> None:
+        """Release connections/files. A no-op for the in-memory store."""
+        ...
+
 
 class InMemoryEventStore:
     def __init__(self, outbox: Any = None) -> None:
@@ -66,6 +70,9 @@ class InMemoryEventStore:
         cur = self._snaps.get((snap.stream, snap.name))
         if cur is None or snap.seq > cur.seq:
             self._snaps[(snap.stream, snap.name)] = snap
+
+    async def aclose(self) -> None:
+        return None
 
     async def last_seq(self, stream: str) -> int:
         return len(self._streams[stream]) - 1
