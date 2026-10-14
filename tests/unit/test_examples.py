@@ -86,6 +86,14 @@ EXPECTED = {
         "weather__reset_station   delivery=at_most_once  approval=True",
         "The forecast says: Lisbon: sunny for the next 3 days",
     ],
+    "context_management.py": [
+        "without a policy the largest request was 13668 tokens (window 4000)",
+        "with a policy the largest request was 3363 tokens",
+        "the model was called 26 times and finished: Done: I looked up all 25 topics.",
+        "compaction was applied on 19 calls, using: ['clear_tool_results', 'stored_summary', 'summarize']",
+        "summaries written to the log: 4",
+        "the log still holds every message: True",
+    ],
     "ensembles.py": [
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",

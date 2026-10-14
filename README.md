@@ -39,6 +39,11 @@ async with Engine() as eng:
    This is safe because algorithms decide from folded state, and every derived event has a
    deterministic id, so a repeated reaction is absorbed by the store instead of duplicating.
 
+## MCP and context management
+`aaa.mcp.MCPClient` connects to any MCP server (stdio, HTTP, or your own session; mcp SDK 1.x and 2.x) and turns its tools into guarded AAA tools,
+with MCP's annotations driving the retry/approval policy. `LLMHandler(client, context=ContextPolicy(max_input_tokens=...))` keeps long runs inside the
+model's window by clearing old tool output, summarizing old turns (summaries are persisted events) or dropping them, without rewriting the log.
+
 ## Long-term memory
 `aaa.memory` gives agents memory across runs behind one small protocol, with adapters for **Mem0**, **Graphiti** (Zep's engine),
 **Supermemory** and **LangGraph/LangMem** stores, a built-in `NativeMemory`, and `CallableMemory` to wrap any other library.

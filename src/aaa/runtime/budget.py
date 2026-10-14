@@ -29,8 +29,9 @@ class Ledger(BaseModel):
                 tokens=self.tokens + int(usage.get("total_tokens", 0)),
                 cost=self.cost + float(e.data.get("cost") or 0.0),
             )
-        if e.type in ("aaa.memory.completed", "aaa.memory.failed"):
-            # memory backends that call an LLM report what they spent; a lookup is not a 'step'
+        if e.type in ("aaa.memory.completed", "aaa.memory.failed", "aaa.context.summary"):
+            # memory backends and context summaries call an LLM and report what they spent;
+            # that is spend, not a 'step'
             usage = e.data.get("usage") or {}
             return Ledger(
                 steps=self.steps,

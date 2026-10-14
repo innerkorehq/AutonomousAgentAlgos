@@ -2,6 +2,12 @@
 
 ## 0.1.0 (unreleased)
 
+**Context management** (see [the guide](../guides/context.md))
+
+- `aaa.context.ContextPolicy` + `LLMHandler(client, context=policy)`: each request is fitted to the model's window as a send-time *view*; the logical conversation, the delta requests and the log are untouched.
+- Strategies: `TruncateToolResults`, `ClearToolResults`, `Summarize` (incremental; persisted as `aaa.context.summary` events, reused by content hash across restarts and workers, billed to the run), `DropOldest`. Tool calls stay with their results; the head and recent turns are never touched.
+- Calibrated token estimates (`CalibratedCounter` learns from `usage.prompt_tokens`; optional `TiktokenCounter`); trigger/target hysteresis; one deeper retry when the provider still reports an overflow.
+
 **MCP client** (see [the guide](../guides/mcp.md))
 
 - `aaa.mcp.MCPClient`: connect to any MCP server over stdio, Streamable HTTP, or your own open `Client`/`ClientSession`, and use its tools as AAA tools (`SchemaTool`: argument validation against the server's JSON Schema, timeouts, approval, execution guard). Works with both the 1.x and 2.x `mcp` SDK.
