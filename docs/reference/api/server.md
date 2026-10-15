@@ -29,3 +29,5 @@ Package `aaa-server`; see [the guide](../../guides/server.md).
 ::: aaa_server.QuotaStore
 
 ::: aaa_server.Denied
+
+::: aaa_server.A2AConfig

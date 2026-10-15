@@ -4,6 +4,7 @@
 aaa store check <store>        open the store (bringing an old layout forward) and report runs and tenants
 aaa runs <store> [--open]      one line per run
 aaa events <store> <run> [--data] [--json]
+aaa mcp serve <module:factory>    serve a ToolRegistry / MCPToolServer over MCP stdio (extra `mcp`)
 aaa-server serve module:factory [--host 127.0.0.1] [--port 8000]
 ```
 

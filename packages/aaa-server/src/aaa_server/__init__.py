@@ -1,5 +1,6 @@
 """HTTP/SSE server for AAA agents: authentication, tenant isolation, rate limits, quotas and approvals."""
 
+from .a2a import A2AConfig
 from .admission import (
     ConcurrencyLimiter,
     Denied,
@@ -23,6 +24,7 @@ from .auth import (
 )
 
 __all__ = [
+    "A2AConfig",
     "ApiKey",
     "ApiKeyAuthenticator",
     "AuthError",

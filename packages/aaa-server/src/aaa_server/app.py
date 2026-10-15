@@ -26,6 +26,7 @@ from starlette.routing import Route
 from aaa.core.ids import new_id
 from aaa.events import Event
 from aaa.llm.parts import Part
+from aaa.mcp.server import MCPToolServer
 from aaa.runtime.budget import Budget
 from aaa.runtime.engine import RUN_COMPLETED, RUNMETA, Algorithm, Engine
 from aaa.session import SessionBusy, SessionClosed, SessionManager
@@ -37,6 +38,8 @@ from aaa.tools.handler import (
     FAILED,
 )
 
+from . import mcp_http
+from .a2a import A2AConfig, A2AEndpoint
 from .admission import ConcurrencyLimiter, Denied, Quota, QuotaStore, RateLimiter
 from .auth import (
     SCOPE_ADMIN,
@@ -116,6 +119,9 @@ class ServerConfig:
     max_body_bytes: int = 1 << 20
     cors_origins: tuple[str, ...] = ()
     event_view: EventView = default_event_view
+    mcp: MCPToolServer | None = None  # serve these tools at POST /mcp
+    mcp_origins: tuple[str, ...] = ()  # browser Origins allowed to call /mcp; none by default
+    a2a: A2AConfig | None = None  # EXPERIMENTAL: serve one algorithm as an A2A agent
 
 
 # -- request models (unknown fields are an error: a client cannot smuggle in a tenant) -----------
@@ -203,6 +209,7 @@ class ServerApp:
         self.cfg = cfg
         self.engine = cfg.engine
         self.streams = ConcurrencyLimiter(cfg.max_streams)
+        self.a2a = A2AEndpoint(self, cfg.a2a) if cfg.a2a else None
         if cfg.quota is not None:
             self.engine.subscribe(RUN_COMPLETED, self._settle, group="aaa-server.quota")
 
@@ -217,7 +224,7 @@ class ServerApp:
     def _public(p: Principal, rid: str) -> str:
         return rid.removeprefix(f"{p.tenant}/")
 
-    async def _body(self, request: Request, model: type[Any]) -> Any:
+    async def _raw(self, request: Request) -> bytes:
         limit = self.cfg.max_body_bytes
         declared = request.headers.get("content-length")
         if declared and declared.isdigit() and int(declared) > limit:
@@ -228,9 +235,12 @@ class ServerApp:
             if size > limit:
                 raise _Reply(413, "too_large", "request body too large")
             chunks.append(c)
+        return b"".join(chunks)
+
+    async def _body(self, request: Request, model: type[Any]) -> Any:
+        raw = await self._raw(request)
         try:
-            doc = json.loads(b"".join(chunks) or b"{}")
-            obj = model.model_validate(doc)
+            return model.model_validate(json.loads(raw or b"{}"))
         except (ValueError, ValidationError) as e:
             detail = (
                 "; ".join(
@@ -241,7 +251,6 @@ class ServerApp:
                 else "body is not valid JSON"
             )
             raise _Reply(422, "invalid_request", detail) from None
-        return obj
 
     def route(
         self, scope: str | None, fn: Callable[..., Awaitable[Response]]
@@ -330,17 +339,22 @@ class ServerApp:
             "usage": meta.ledger.model_dump(),
         }
 
-    async def start_run(self, request: Request, p: Principal) -> Response:
-        req: RunRequest = await self._body(request, RunRequest)
-        algo = self.cfg.algorithms.get(req.algo)
-        if algo is None:
-            raise _Reply(404, "unknown_algorithm", "no such algorithm")
+    async def launch(
+        self,
+        p: Principal,
+        algo: Algorithm,
+        input: dict[str, Any],
+        *,
+        key: str | None = None,
+        asked: BudgetRequest | None = None,
+    ) -> tuple[str, bool]:
+        """Admit and start a run for `p`: (namespaced run id, whether it was newly started). Every entry point (REST,
+        A2A) goes through here, so the checks cannot differ between them."""
         try:
-            _forbid_blob_refs(req.input)
+            _forbid_blob_refs(input)
         except ValueError as e:
             raise _Reply(422, "invalid_request", str(e)) from None
         scope = self.engine.tenant(p.tenant)
-        key = request.headers.get("idempotency-key")
         if key is not None and not _ID.match(key):
             raise _Reply(422, "invalid_request", "Idempotency-Key must match [A-Za-z0-9._-]{1,128}")
         if key is not None:
@@ -352,12 +366,12 @@ class ServerApp:
             if started is not None:  # a replay: same request -> same run; different request -> 409
                 same = started.data.get("algo") == algo.name and started.data.get(
                     "input"
-                ) == to_jsonable_python(req.input, serialize_unknown=True)
+                ) == to_jsonable_python(input, serialize_unknown=True)
                 if not same:
                     raise _Reply(
                         409, "idempotency_conflict", "that key was used for another request"
                     )
-                return JSONResponse(await self._summary(p, rid), status_code=200)
+                return rid, False
         if self.cfg.max_open_runs is not None:
             open_now = len(await scope.runs(open_only=True))
             if open_now >= self.cfg.max_open_runs:
@@ -366,12 +380,22 @@ class ServerApp:
             await self.cfg.quota.admit(p.tenant, scope.run_id(key) if key else new_id())
         handle = await scope.start(
             algo,
-            req.input,
+            input,
             run_id=key,
-            budget=clamp_budget(self.cfg.budget, req.budget),
+            budget=clamp_budget(self.cfg.budget, asked),
             user=p.subject,
         )
-        return JSONResponse(await self._summary(p, handle.run_id), status_code=202)
+        return handle.run_id, True
+
+    async def start_run(self, request: Request, p: Principal) -> Response:
+        req: RunRequest = await self._body(request, RunRequest)
+        algo = self.cfg.algorithms.get(req.algo)
+        if algo is None:
+            raise _Reply(404, "unknown_algorithm", "no such algorithm")
+        rid, created = await self.launch(
+            p, algo, req.input, key=request.headers.get("idempotency-key"), asked=req.budget
+        )
+        return JSONResponse(await self._summary(p, rid), status_code=202 if created else 200)
 
     async def list_runs(self, request: Request, p: Principal) -> Response:
         scope = self.engine.tenant(p.tenant)
@@ -433,13 +457,16 @@ class ServerApp:
         p: Principal,
         body: Callable[[], AsyncIterator[bytes]],
         stack: AsyncExitStack,
+        *,
+        trailer: bool = True,
     ) -> StreamingResponse:
         async def guarded() -> AsyncIterator[bytes]:
             try:
                 with anyio.move_on_after(self.cfg.max_stream_s):
                     async for chunk in body():
                         yield chunk
-                yield _sse("end", {"reason": "max_duration_or_done"})
+                if trailer:  # protocols with their own framing (A2A) must not see an extra event
+                    yield _sse("end", {"reason": "max_duration_or_done"})
             finally:
                 await stack.aclose()
 
@@ -589,6 +616,31 @@ class ServerApp:
 
         return self._stream_response(p, body, stack)
 
+    # -- endpoints: A2A -----------------------------------------------------------------------
+    async def agent_card(self, request: Request) -> Response:
+        assert self.cfg.a2a is not None
+        return JSONResponse(self.cfg.a2a.card())
+
+    # -- endpoints: MCP ---------------------------------------------------------------------------
+    async def mcp_post(self, request: Request, p: Principal) -> Response:
+        core = self.cfg.mcp
+        if core is None:
+            raise _Reply(404, "not_found", "not found")
+        origin = request.headers.get("origin")
+        if (
+            origin is not None and origin not in self.cfg.mcp_origins
+        ):  # DNS-rebinding defence (MCP spec)
+            raise _Reply(403, "forbidden", "origin not allowed")
+        try:
+            message = json.loads(await self._raw(request))
+        except ValueError:
+            return JSONResponse(mcp_http._error(None, mcp_http.PARSE_ERROR, "parse error"), 400)
+        answer = await mcp_http.handle(core, message, tenant=p.tenant, user=p.subject)
+        return Response(status_code=202) if answer is None else JSONResponse(answer)
+
+    async def mcp_other(self, request: Request, p: Principal) -> Response:
+        return Response(status_code=405, headers={"Allow": "POST"})
+
     # -- endpoints: usage --------------------------------------------------------------------------
     async def usage(self, request: Request, p: Principal) -> Response:
         q = self.cfg.quota
@@ -623,6 +675,16 @@ def create_app(cfg: ServerConfig, *, manage_engine: bool = False) -> Starlette:
             r(SCOPE_SESSION, app.send_message),
             methods=["POST"],
         ),
+        *(
+            [
+                Route("/a2a", r(SCOPE_RUN, app.a2a.rpc), methods=["POST"]),
+                Route("/.well-known/agent-card.json", app.agent_card, methods=["GET"]),
+            ]
+            if app.a2a and cfg.a2a
+            else []
+        ),
+        Route("/mcp", r(SCOPE_RUN, app.mcp_post), methods=["POST"]),
+        Route("/mcp", r(SCOPE_RUN, app.mcp_other), methods=["GET", "DELETE"]),
         Route("/v1/usage", r(SCOPE_ADMIN, app.usage), methods=["GET"]),
     ]
     middleware = []

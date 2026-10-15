@@ -3,6 +3,7 @@
     aaa store check sqlite:///agent.db     open the store (bringing an old layout forward) and report on it
     aaa runs sqlite:///agent.db            one line per run
     aaa events sqlite:///agent.db RUN_ID   the run's events, in order
+    aaa mcp serve mymodule:build           serve a ToolRegistry / MCPToolServer over MCP stdio (extra `mcp`)
 
 Store URLs: `sqlite:///path.db` (or a bare `*.db` path), `postgresql://...` (extra `postgres`) and `redis://...` (extra `redis`). These commands never write events."""
 
@@ -90,6 +91,29 @@ async def _events(url: str, run_id: str, show_data: bool, as_json: bool) -> int:
         await store.aclose()
 
 
+async def _mcp_serve(spec: str) -> int:
+    import importlib
+    import inspect
+
+    from aaa.mcp.server import MCPToolServer, serve_stdio
+    from aaa.tools import ToolRegistry
+
+    module, _, attr = spec.partition(":")
+    if not module or not attr:
+        raise SystemExit("expected module:factory, e.g. myapp.tools:build")
+    sys.path.insert(0, "")
+    obj = getattr(importlib.import_module(module), attr)
+    obj = obj() if callable(obj) else obj
+    if inspect.isawaitable(obj):
+        obj = await obj
+    if isinstance(obj, ToolRegistry):
+        obj = MCPToolServer(obj)
+    if not isinstance(obj, MCPToolServer):
+        raise SystemExit(f"{spec} must return a ToolRegistry or MCPToolServer")
+    await serve_stdio(obj)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="aaa", description="Inspect an AAA event store.")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -103,8 +127,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     ev.add_argument("run_id")
     ev.add_argument("--data", action="store_true", help="show (clipped) event payloads")
     ev.add_argument("--json", action="store_true", help="one JSON event per line")
+    mc = sub.add_parser("mcp", help="MCP server").add_subparsers(dest="sub", required=True)
+    sv = mc.add_parser("serve", help="serve tools over MCP stdio")
+    sv.add_argument("factory", help="module:function returning a ToolRegistry or MCPToolServer")
     a = ap.parse_args(argv)
     try:
+        if a.cmd == "mcp":
+            return asyncio.run(_mcp_serve(a.factory))
         if a.cmd == "store":
             return asyncio.run(_check(a.url))
         if a.cmd == "runs":

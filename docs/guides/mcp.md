@@ -108,3 +108,39 @@ The client is tested against a **real** MCP server built with the official SDK, 
 (with credentials), on both SDK major versions (CI runs the 1.x and 2.x legs). Nothing here has been run against a third-party production MCP server;
 the protocol is the same, but servers vary in how they annotate tools and report errors. Not yet supported: server-initiated **sampling** and
 **elicitation** requests, prompts, resource subscriptions, and OAuth flows (bring your own authenticated client via `MCPClient(session)`).
+
+
+## Serving your tools over MCP
+
+`MCPToolServer` offers a `ToolRegistry` (and, optionally, whole algorithms) to any MCP client: Claude Desktop, an IDE, another agent. Run it on stdio with `aaa mcp serve myapp.tools:build`
+(a function returning a `ToolRegistry` or an `MCPToolServer`) or call `await serve_stdio(server)`; behind [`aaa-server`](server.md) the same object is served at `POST /mcp` with the
+server's authentication. Works with both major versions of the `mcp` SDK.
+
+```python
+--8<-- "examples/mcp_server.py"
+```
+
+```text
+offered: ['add', 'lookup', 'run_agent']
+add: 5
+bad args: True
+lookup: lookup failed
+wire_money: unknown tool 'wire_money' | error: True
+run_agent: {"kind": "success", "value": {"text": "Paris.", "turns": 1}, "reason": null}
+```
+
+The defaults assume the caller is not the person who wrote the tools:
+
+- **Tools that require approval are hidden** and a call to one is answered exactly like a call to a tool that does not exist. MCP has no approval channel, so nothing is ever approved
+  automatically. To offer one anyway, pass `approval=` (an async callback `(name, arguments, tenant) -> bool` that decides, failing closed if it raises) or, if you accept the
+  risk, `expose_approval_tools=True`.
+- **Arguments are validated by the tool's schema** before it runs (unknown fields are refused). A tool's `ToolError` message is shown; any other exception is logged on the server and
+  reported only as "`<tool>` failed", so connection strings and stack traces do not leave. Results are capped (`max_result_chars`).
+- **Tenant and user are fixed by the host**, never by the client: `tenant=`/`user=` on a stdio server, the authenticated principal behind `aaa-server`. A tool that takes a `ctx`
+  sees them in `ctx.tenant` / `ctx.meta["user"]`.
+- **`run_agent` is off unless you pass `algorithms=`** (and an `engine=`). It runs the named algorithm to completion in the host's tenant under `agent_budget` (default: 50 steps, 200k
+  tokens, 120 s), and returns only the outcome. A run that needs a human approval cannot be approved from MCP; the deadline ends it.
+
+Verified: the official SDK client (1.x and 2.x, in process) and `MCPClient` (against a real stdio subprocess, and against the HTTP endpoint on a real socket). Not verified: specific MCP hosts such
+as Claude Desktop. The HTTP endpoint implements the stateless subset of Streamable HTTP (one JSON answer per POST, no sessions, no server-initiated messages), which covers `initialize`,
+`ping`, `tools/list` and `tools/call`; resources, prompts, sampling and progress notifications are not served.

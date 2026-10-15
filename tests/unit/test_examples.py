@@ -117,6 +117,13 @@ EXPECTED = {
         "code_exec waits for approval: code_exec",
         "The program printed: 5050",
     ],
+    "mcp_server.py": [
+        "offered: ['add', 'lookup', 'run_agent']",
+        "add: 5",
+        "lookup: lookup failed",
+        "wire_money: unknown tool 'wire_money' | error: True",
+        'run_agent: {"kind": "success", "value": {"text": "Paris.", "turns": 1}, "reason": null}',
+    ],
     "server_quickstart.py": [
         "no credentials : 401",
         "waiting for    : wire_money {'amount': 250}",

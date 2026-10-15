@@ -80,6 +80,18 @@ The stream is a **projection** of the log, not the log: `run.started`, `delta` (
 arguments, clipped to 4 KiB, so a human can decide), `session.reply`, and `run.completed` (kind and reason; the value is on `GET /v1/runs/{id}`). System prompts, memory, guard internals and raw
 model requests never leave. To show more or less, pass `event_view=` (a function from `Event` to a dict or `None`).
 
+## MCP and A2A
+
+- **MCP**: `ServerConfig(mcp=MCPToolServer(registry))` serves the tools at `POST /mcp` (see [serving your tools over MCP](mcp.md#serving-your-tools-over-mcp)). It is behind the same bearer authentication, rate
+  limit and body limit as everything else; the tool's tenant and user are the principal's. A browser `Origin` header is refused unless listed in `mcp_origins` (the MCP spec's defence against
+  DNS rebinding); non-browser clients send none. `GET`/`DELETE` are `405`.
+- **A2A (experimental)**: `ServerConfig(a2a=A2AConfig(algorithm="agent", url="https://agents.example.com", name=..., description=...))` serves one algorithm as an
+  [Agent2Agent](https://a2a-protocol.org) agent: the card at `/.well-known/agent-card.json` (public) and the JSON-RPC binding at `POST /a2a` (authenticated), targeting **A2A 1.0**:
+  `SendMessage` (blocks until the task finishes, or returns the working task with `returnImmediately`), `SendStreamingMessage`, `SubscribeToTask`, `GetTask`, `ListTasks`, `CancelTask`.
+  Tasks are runs: same admission, quota, budget and tenant scope as `POST /v1/runs`. A task that parks on a human approval is `TASK_STATE_INPUT_REQUIRED`; it is approved through the REST
+  endpoint by a principal with the `approve` scope. Text parts only; push notifications, the extended card, multi-turn tasks and the gRPC/REST bindings are not implemented. It is marked
+  experimental in the [stability policy](../policy/stability.md): the protocol is young, and this surface may change in a minor release.
+
 ## Limits
 
 - **Budgets are server-side.** `ServerConfig.budget` is a ceiling; a request may lower a limit (or set one the server left open) but never raise it.
@@ -92,5 +104,5 @@ model requests never leave. To show more or less, pass `event_view=` (a function
 
 Covered by the test-suite (ASGI, in-process): the 401 behaviour, scope checks, every endpoint against a foreign id, identity-field spoofing, idempotency, SSE ordering and resume, the approval flow
 including pre-signing, budgets, rate limits (fake clock), quota races (12 concurrent requests for 3 units admit exactly 3), JWT pitfalls (`none`, key confusion, missing `exp`, wrong `aud`/`iss`,
-key-id floods, `jku`), and the Redis limiter against a real Redis. **Not covered**: a real TLS/proxy deployment, very large numbers of concurrent SSE clients, and a real identity provider (JWKS is
+key-id floods, `jku`), and the Redis limiter against a real Redis. MCP over HTTP and A2A are checked against the official `mcp` SDK client and the official `a2a-sdk` client over real sockets (the A2A agent card is parsed with the protocol's own generated `AgentCard` type). **Not covered**: a real TLS/proxy deployment, very large numbers of concurrent SSE clients, and a real identity provider (JWKS is
 served by a mock transport with keys generated in the test).

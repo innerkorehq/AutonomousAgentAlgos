@@ -17,7 +17,7 @@ AAA is **pre-1.0**. This page says what that means in practice, so you can decid
 |---|---|
 | **Stable** (changes are deprecated first) | `aaa.runtime` (Engine, RunHandle, Budget, Ledger), `aaa.events` (Event, stores, buses, Projection), `aaa.core` (Outcome, errors), `aaa.llm` types and the `LLMClient` protocols, `aaa.tools` (Tool, ToolRegistry, ToolHandler), `aaa.algos` public classes, `aaa.session`, `aaa.memory` protocols, `aaa.vector` protocols and filters, `aaa.guard` protocols and policy, `aaa.eval` core, `aaa.observe` core |
 | **Provisional** (may change in a minor release with a changelog note) | adapters for third-party libraries and services (they follow those projects), `aaa.score`, `aaa.safe`, `aaa.trace` attribute names (the OpenTelemetry GenAI conventions are themselves unstable) |
-| **Experimental** (may change or disappear in any release) | anything the docs mark experimental, including A2A support once it ships |
+| **Experimental** (may change or disappear in any release) | anything the docs mark experimental, including `aaa_server.A2AConfig` (A2A support); the `aaa-server` package as a whole is provisional until its 1.0 |
 
 Names starting with an underscore, and anything not documented in the API reference, are private.
 

@@ -30,6 +30,18 @@ and asks for approval; the server's job is to make sure **only the right caller 
 | 12 | **Information at rest in the process**: unauthenticated endpoints. | Only `/healthz`, which returns `{"ok": true}` and no version or configuration. |
 | 13 | **Binding to the world by accident.** | `aaa-server serve` listens on `127.0.0.1` by default; exposing it is a flag you type. TLS terminates at a reverse proxy (documented), not in the library. |
 
+## MCP and A2A endpoints (added in M7)
+
+| # | Threat | Decision |
+|---|---|---|
+| 14 | **An MCP/A2A client choosing its own tenant or user** (tool arguments, task metadata). | Both endpoints take the tenant and user from the authenticated principal; tool arguments are validated with `extra=forbid`, so `{"tenant": ...}` is an error. Tests call both endpoints as two tenants. |
+| 15 | **Reaching an approval-gated tool through MCP**, which has no approval step. | Such tools are not listed and a call is answered like an unknown tool. Exposing one needs an explicit `approval=` callback (fails closed) or `expose_approval_tools=True`. Nothing is auto-approved. |
+| 16 | **Tool failures leaking internals** (connection strings, stack traces) to a remote caller. | Only a tool's own `ToolError` text is returned; other exceptions are logged server-side and reported as "`<tool>` failed". |
+| 17 | **DNS rebinding against `/mcp`.** | A request carrying an `Origin` header is refused unless the origin is listed; bearer auth is required regardless. |
+| 18 | **`run_agent` / A2A as a cost amplifier.** | Both go through the same admission path as `POST /v1/runs`: rate limit, open-run cap, quota, and a server-side budget the caller cannot raise. |
+| 19 | **Probing task ids across tenants through A2A.** | A foreign task and a missing task give the same `TaskNotFound` error. |
+| 20 | **Trusting a remote agent card.** | Out of scope here: this server only *publishes* a card (public, containing no secrets). Consuming other agents' cards is not implemented. |
+
 ## Out of scope
 
 Authenticating end users (OIDC login flows, sessions in browsers), TLS termination, DDoS protection, WAF rules, and what the algorithms and tools themselves do once a run starts

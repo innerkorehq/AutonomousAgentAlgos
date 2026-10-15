@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**MCP server and A2A** (see [serving tools over MCP](../guides/mcp.md#serving-your-tools-over-mcp) and the [server guide](../guides/server.md))
+
+- `aaa.mcp.MCPToolServer` / `serve_stdio` / `aaa mcp serve`: expose a `ToolRegistry` to any MCP client (SDK 1.x and 2.x). Approval-gated tools are hidden unless you provide an `approval=` callback; failures never leak internals; tenant and user are fixed by the host; `run_agent` runs algorithms under a server-side budget and is opt-in.
+- `aaa-server`: `POST /mcp` (stateless Streamable HTTP subset, behind the server's auth and limits, Origin-checked) and **experimental** A2A 1.0 (`A2AConfig`: agent card, `SendMessage`, `SendStreamingMessage`, `SubscribeToTask`, `GetTask`, `ListTasks`, `CancelTask`), both verified against the official `mcp` and `a2a-sdk` clients.
+
 **HTTP server** (new package `aaa-server`; see [the guide](../guides/server.md) and [threat model](../security/server.md))
 
 - Starlette/ASGI app with SSE: runs (idempotent start, cancel, resumable event stream via `Last-Event-ID`), tool approvals over HTTP (`approve` scope, pending calls only), chat sessions with streaming replies. Tenant, user and metadata come only from the authenticated principal; foreign ids are indistinguishable from missing ones; the event stream is a filtered projection; budgets are a server-side ceiling.

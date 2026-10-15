@@ -13,3 +13,9 @@
 ::: aaa.tools.SchemaTool
 
 ::: aaa.tools.validate_arguments
+
+::: aaa.mcp.MCPToolServer
+
+::: aaa.mcp.server.serve_stdio
+
+::: aaa.mcp.server.build_server
