@@ -23,6 +23,9 @@ class Doc(BaseModel):
 class Hit(BaseModel):
     doc: Doc
     score: float
+    # set by vector-store backed indexes: what `score` means (a similarity, or a distance where lower is better)
+    metric: str | None = None
+    higher_is_better: bool = True
 
 
 @runtime_checkable

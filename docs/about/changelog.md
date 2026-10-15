@@ -6,6 +6,11 @@
 
 - `aaa.observe.Observer`: derives traces from the event log (`aaa.trace.spans_from_events`) and exports them whole, parents first, once per cluster, without ever failing a run. Sinks: `InMemorySink`, `ConsoleSink`, `CallableSink`, `OTelSink` and presets `LangfuseSink`, `LangSmithSink`, `PhoenixSink` (extras `otel`, `langfuse`, `langsmith`, `phoenix`). Content capture is opt-in; sampling, tenant filter, incremental export of open sessions, `backfill`.
 
+**Vector stores** (see [the guide](../guides/vector-stores.md))
+
+- `aaa.vector`: `VectorStore` protocol (vectors + payload, namespaces, dimension checks), `EmbeddingIndex(store, embedder)` implementing the existing `Index` (so `RAGAgent`, `search_tool` and `NativeMemory` run on a persistent store), a small filter language with identical semantics in every store (`UnsupportedFilter` instead of silent post-filtering), `TenantVectorStore` (namespace wall plus an outer tenant filter), `RerankingIndex`.
+- Stores: `InMemoryVectorStore`, `PgVectorStore` (pgvector over asyncpg, HNSW, jsonb filters) and `QdrantStore` (server or in-process), all run through one shared contract suite. `Hit` gains `metric` and `higher_is_better`. CI's PostgreSQL image is now `pgvector/pgvector:pg16`.
+
 **Guardrails** (see [the guide](../guides/guardrails.md))
 
 - `aaa.guard`: `GuardPolicy` + `LLMHandler(guards=)` / `ToolHandler(guards=)` check `input`, `output`, `tool_call` and `tool_result`. Actions allow / flag / redact / approve / block; a blocked run ends as the new `OutcomeKind.BLOCKED`, a blocked tool call is a normal tool failure, a poisoned tool result is replaced by a placeholder, `approve` uses the existing approval flow.

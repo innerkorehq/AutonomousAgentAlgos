@@ -389,6 +389,9 @@ otel = [
     { name = "opentelemetry-sdk" },
     { name = "opentelemetry-semantic-conventions" },
 ]
+pgvector = [
+    { name = "asyncpg" },
+]
 phoenix = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
@@ -396,6 +399,9 @@ phoenix = [
 ]
 postgres = [
     { name = "asyncpg" },
+]
+qdrant = [
+    { name = "qdrant-client" },
 ]
 redis = [
     { name = "redis" },
@@ -413,6 +419,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.4" },
+    { name = "asyncpg", marker = "extra == 'pgvector'", specifier = ">=0.29" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.29" },
     { name = "autoevals", marker = "extra == 'autoevals'", specifier = ">=0.0.100" },
     { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'langfuse'" },
@@ -434,9 +441,10 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.30" },
     { name = "opentelemetry-semantic-conventions", marker = "extra == 'otel'", specifier = ">=0.50b0" },
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.9" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
 ]
-provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgraph", "langmem", "otel", "langfuse", "langsmith", "phoenix", "autoevals", "mcp", "docs"]
+provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgraph", "langmem", "otel", "langfuse", "langsmith", "phoenix", "autoevals", "pgvector", "qdrant", "mcp", "docs"]
 
 [package.metadata.requires-dev]
 dev = [

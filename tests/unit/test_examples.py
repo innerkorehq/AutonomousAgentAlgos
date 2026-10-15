@@ -107,6 +107,11 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "vector_search.py": [
+        "all: ['a', 'd', 'b', 'c']",
+        "english, 2023 or later: ['a', 'c']",
+        "acme sees: ['acme invoice terms']",
+    ],
     "guardrails.py": [
         "the model saw the SSN: False",
         "the model saw the injection: False",

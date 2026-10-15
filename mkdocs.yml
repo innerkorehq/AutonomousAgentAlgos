@@ -98,6 +98,7 @@ nav:
       - Large payloads: guides/large-payloads.md
       - Chat sessions and provider state: guides/sessions.md
       - Context management: guides/context.md
+      - Vector stores: guides/vector-stores.md
       - Long-term memory: guides/memory.md
       - Observability and tracing: guides/observability.md
       - Evaluating agents: guides/evals.md
@@ -128,6 +129,7 @@ nav:
           - Observability: reference/api/observe.md
           - Evals: reference/api/eval.md
           - Guardrails: reference/api/guard.md
+          - Vector stores: reference/api/vector.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:

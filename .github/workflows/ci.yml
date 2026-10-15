@@ -44,7 +44,7 @@ jobs:
         python: ["3.11", "3.12"]
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_PASSWORD: aaa
         ports: ["5432:5432"]
@@ -126,6 +126,39 @@ jobs:
           uv run --no-sync python -m spacy download en_core_web_sm
       - name: Adapter tests
         run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard.py tests/unit/test_guard_adapters.py
+
+  vector-adapters:
+    # pgvector (real PostgreSQL with the extension) and Qdrant (its in-process mode) run the shared contract suite.
+    # AAA_REQUIRE_PGVECTOR turns "extension not available" from a skip into a failure, so this job cannot go green by skipping.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: aaa
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AAA_TEST_POSTGRES_URL: postgresql://postgres:aaa@localhost:5432/postgres
+      AAA_REQUIRE_PGVECTOR: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra qdrant
+      - name: Vector store tests
+        run: uv run pytest -v -p no:cacheprovider tests/unit/test_vector.py tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py
+      - name: Newest releases (scheduled and manual runs only)
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        run: |
+          uv pip install --upgrade qdrant-client asyncpg
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py
 
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
