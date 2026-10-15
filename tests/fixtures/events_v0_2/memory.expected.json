@@ -1,0 +1,74 @@
+{
+ "01M509MWTCPZ9EJYHZ270006W0": {
+  "fsm": {
+   "input": {
+    "task": "what do you know"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "what do you know"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "0264N2Z5K36A6C044J0",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "task": "what do you know"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "what do you know"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "remembered",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "remembered"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "what do you know"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

@@ -1,0 +1,83 @@
+{
+ "01M509MWT5TK2QYBKCPW1Z4C52": {
+  "fsm": {
+   "input": {
+    "task": "use tools"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "use tools"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "W37V6FS3KNPAX7CMKMD",
+   "results": {},
+   "round_calls": [],
+   "turns": 3
+  },
+  "plan": {
+   "input": {
+    "task": "use tools"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "use tools"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "done",
+     "turns": 3
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 5,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "",
+    "",
+    "done"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {
+    "call_K0232D9GAH1F1YRW4WS_0": "RuntimeError: kaput"
+   },
+   "input": {
+    "task": "use tools"
+   },
+   "requested": [
+    "call_XCM44WKQJ471AQ5J807_0",
+    "call_K0232D9GAH1F1YRW4WS_0"
+   ],
+   "results": {
+    "call_XCM44WKQJ471AQ5J807_0": 3
+   }
+  }
+ }
+}

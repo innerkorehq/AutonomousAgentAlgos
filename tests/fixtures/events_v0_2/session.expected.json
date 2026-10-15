@@ -1,0 +1,394 @@
+{
+ "s-01M509MWVQ5VZ93AEXQ22NRJ7C": {
+  "fsm": {
+   "input": {
+    "inner": "tool_loop"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "inner": "tool_loop"
+   },
+   "names": {},
+   "phase": "start",
+   "recalled": [],
+   "request_id": null,
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "inner": "tool_loop"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "inner": "tool_loop"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": "closed",
+    "value": {
+     "turns": 2
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 2,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": []
+  },
+  "session": {
+   "summaries": [],
+   "turns": [
+    {
+     "assistant": "seen 1 user messages",
+     "n": 0,
+     "reason": null,
+     "run_id": "s-01M509MWVQ5VZ93AEXQ22NRJ7C:t0",
+     "state_id": null,
+     "status": "done",
+     "user": "hello"
+    },
+    {
+     "assistant": "seen 2 user messages",
+     "n": 1,
+     "reason": null,
+     "run_id": "s-01M509MWVQ5VZ93AEXQ22NRJ7C:t1",
+     "state_id": null,
+     "status": "done",
+     "user": "again"
+    }
+   ]
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "inner": "tool_loop"
+   },
+   "requested": [],
+   "results": {}
+  }
+ },
+ "s-01M509MWVQ5VZ93AEXQ22NRJ7C:t0": {
+  "fsm": {
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "GFRSS2EBAXT8361VV3M",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "seen 1 user messages",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "seen 1 user messages"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "requested": [],
+   "results": {}
+  }
+ },
+ "s-01M509MWVQ5VZ93AEXQ22NRJ7C:t1": {
+  "fsm": {
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     },
+     {
+      "content": "seen 1 user messages",
+      "role": "assistant",
+      "tool_calls": []
+     },
+     {
+      "content": "again",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     },
+     {
+      "content": "seen 1 user messages",
+      "role": "assistant",
+      "tool_calls": []
+     },
+     {
+      "content": "again",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "4B345A1PSZET3MDMM81",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     },
+     {
+      "content": "seen 1 user messages",
+      "role": "assistant",
+      "tool_calls": []
+     },
+     {
+      "content": "again",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     },
+     {
+      "content": "seen 1 user messages",
+      "role": "assistant",
+      "tool_calls": []
+     },
+     {
+      "content": "again",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "seen 2 user messages",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "seen 2 user messages"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "messages": [
+     {
+      "content": "Be brief.",
+      "role": "system",
+      "tool_calls": []
+     },
+     {
+      "content": "hello",
+      "role": "user",
+      "tool_calls": []
+     },
+     {
+      "content": "seen 1 user messages",
+      "role": "assistant",
+      "tool_calls": []
+     },
+     {
+      "content": "again",
+      "role": "user",
+      "tool_calls": []
+     }
+    ]
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

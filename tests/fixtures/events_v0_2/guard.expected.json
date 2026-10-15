@@ -1,0 +1,146 @@
+{
+ "01M509MWTFKRRM03XXFQHP71SE": {
+  "fsm": {
+   "input": {
+    "task": "read the page"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "read the page"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "3GXAAKMKJZEEV8JVD1Y",
+   "results": {},
+   "round_calls": [],
+   "turns": 2
+  },
+  "plan": {
+   "input": {
+    "task": "read the page"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "read the page"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "done",
+     "turns": 2
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 3,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "",
+    "done"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "read the page"
+   },
+   "requested": [
+    "call_DKFYT0NBS54JWX2NFKR_0"
+   ],
+   "results": {
+    "call_DKFYT0NBS54JWX2NFKR_0": "[tool result withheld by policy: denied_phrase]"
+   }
+  }
+ },
+ "01M509MWTGD7Z9E3PWSK9C6B1Q": {
+  "fsm": {
+   "input": {
+    "task": "DROP TABLE users"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "DROP TABLE users"
+   },
+   "names": {},
+   "phase": "llm",
+   "recalled": [],
+   "request_id": "KZ7XD8WR4PAVDAQMF9S",
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "task": "DROP TABLE users"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "DROP TABLE users"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "blocked",
+    "reason": "GuardrailBlocked: blocked by policy at input: denied_phrase",
+    "value": null
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 0,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 1,
+   "texts": []
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "DROP TABLE users"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

@@ -1,0 +1,82 @@
+{
+ "01M509MWV71S7BG14ZSYDZSWS4": {
+  "fsm": {
+   "input": {},
+   "path": []
+  },
+  "loop": {
+   "input": {},
+   "names": {
+    "a": "add",
+    "z": "add"
+   },
+   "phase": "tools",
+   "recalled": [],
+   "request_id": null,
+   "results": {
+    "a": [
+     true,
+     3
+    ],
+    "z": [
+     true,
+     10
+    ]
+   },
+   "round_calls": [
+    "a",
+    "z"
+   ],
+   "turns": 0
+  },
+  "plan": {
+   "input": {},
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {},
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": 10
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 2,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": []
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {},
+   "requested": [
+    "a",
+    "skipme",
+    "z"
+   ],
+   "results": {
+    "a": 3,
+    "skipme": null,
+    "z": 10
+   }
+  }
+ }
+}

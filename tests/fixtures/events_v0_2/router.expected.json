@@ -1,0 +1,146 @@
+{
+ "01M509MWV6PCZWA5R5RWBHSFP3": {
+  "fsm": {
+   "input": {
+    "task": "refund please"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "refund please"
+   },
+   "names": {},
+   "phase": "start",
+   "recalled": [],
+   "request_id": null,
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "task": "refund please"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "refund please"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "routed answer",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 2,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "{\"route\": \"billing\"}"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "refund please"
+   },
+   "requested": [],
+   "results": {}
+  }
+ },
+ "Z83XP6G0F3S1JKDCB28": {
+  "fsm": {
+   "input": {
+    "task": "refund please"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "refund please"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "BMZPKT5X8C073DPVAEF",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "task": "refund please"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "refund please"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "routed answer",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "routed answer"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "refund please"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

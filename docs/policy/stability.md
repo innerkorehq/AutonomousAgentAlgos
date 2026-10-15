@@ -29,6 +29,7 @@ The log is your data, so its format is held to a stricter rule than the code:
 - Code that reads the log (every `Projection`, every algorithm) must tolerate every shape the log has ever held. Stores never rewrite or upcast stored events.
 - A `Projection` whose state shape changes bumps its `version`; old snapshots are then ignored and rebuilt from the log.
 - A change that would break this rule is made as a **new event type** and the old one keeps being read.
+- Real v0.2 logs are replayed by every CI run (`tests/unit/test_event_compat.py`). See [Evolving events and stores](../guides/evolving-events.md), which also covers the stores' own layout versions.
 
 ## Deprecation
 

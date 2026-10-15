@@ -1,0 +1,80 @@
+{
+ "01M509MWWEZP8D33WQ4BFREJJ9": {
+  "fsm": {
+   "input": {
+    "task": "loop"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "loop"
+   },
+   "names": {
+    "call_2DKCCZGCW7E8MRXJ5HF_0": "add"
+   },
+   "phase": "tools",
+   "recalled": [],
+   "request_id": "2DKCCZGCW7E8MRXJ5HF",
+   "results": {},
+   "round_calls": [
+    "call_2DKCCZGCW7E8MRXJ5HF_0"
+   ],
+   "turns": 2
+  },
+  "plan": {
+   "input": {
+    "task": "loop"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "loop"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "budget_exceeded",
+    "reason": "steps 3 > 2",
+    "value": null
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 3,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "",
+    ""
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "loop"
+   },
+   "requested": [
+    "call_EBWVCFRNE799EHD3QNX_0"
+   ],
+   "results": {
+    "call_EBWVCFRNE799EHD3QNX_0": 1
+   }
+  }
+ }
+}

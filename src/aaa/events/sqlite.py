@@ -9,6 +9,7 @@ from typing import Any
 
 from aaa.core.aio import wait_for
 from aaa.core.errors import ConcurrencyError
+from aaa.events import migrate
 from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
 from aaa.events.store import ANY_SEQ, RUN_COMPLETED, RUN_STARTED, RunInfo
@@ -31,6 +32,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
 """
 
 
+MIGRATIONS: dict[
+    int, str
+] = {}  # n -> SQL script migrating layout n-1 to n (empty: version 1 is the 0.1/0.2 layout)
+
+
 class SQLiteEventStore:
     """Durable EventStore on stdlib sqlite3 (no extra dependency).
 
@@ -47,14 +53,57 @@ class SQLiteEventStore:
         self.path, self._poll = str(path), poll_s
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aaa-sqlite")
         self._cond: asyncio.Condition | None = None
-        self._pool.submit(self._open, synchronous).result()
+        try:
+            self._pool.submit(self._open, synchronous).result()
+        except BaseException:
+            self._pool.shutdown(wait=True)
+            raise
 
     def _open(self, synchronous: str) -> None:
         self._conn = sqlite3.connect(self.path, isolation_level=None)  # explicit transactions
+        try:
+            self._configure(synchronous)
+        except BaseException:
+            self._conn.close()  # e.g. a store written by a newer release: do not leave the file open
+            raise
+
+    def _configure(self, synchronous: str) -> None:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(f"PRAGMA synchronous={synchronous}")
         self._conn.execute("PRAGMA busy_timeout=5000")
-        self._conn.executescript(_SCHEMA)
+        found = self._conn.execute("PRAGMA user_version").fetchone()[0]
+        has_tables = (
+            self._conn.execute("SELECT 1 FROM sqlite_master WHERE name='events'").fetchone()
+            is not None
+        )
+        if found == 0 and not has_tables:  # a new file
+            self._conn.executescript(_SCHEMA)
+            self._conn.execute(f"PRAGMA user_version={int(migrate.SCHEMA_VERSION)}")
+            return
+        if found == 0:
+            found = 1  # written before layout versions existed: that layout is version 1
+        steps = migrate.pending(
+            found, migrate.SCHEMA_VERSION, MIGRATIONS
+        )  # refuses a newer file before touching it
+        self._conn.executescript(
+            _SCHEMA
+        )  # CREATE ... IF NOT EXISTS: a no-op unless a table is missing
+        for v in steps:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                for stmt in (q for q in MIGRATIONS[v].split(";") if q.strip()):
+                    self._conn.execute(stmt)
+                self._conn.execute(f"PRAGMA user_version={int(v)}")
+                self._conn.execute("COMMIT")
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+        self._conn.execute(
+            f"PRAGMA user_version={int(steps[-1] if steps else found)}"
+        )  # also stamps an unversioned file
+
+    async def schema_version(self) -> int:
+        return int(await self._run(lambda: self._conn.execute("PRAGMA user_version").fetchone()[0]))
 
     async def _run(self, fn: Any, *args: Any) -> Any:
         return await asyncio.get_running_loop().run_in_executor(self._pool, fn, *args)

@@ -1,0 +1,79 @@
+{
+ "01M509MWTAGK7W79B6VVE4210G": {
+  "fsm": {
+   "input": {
+    "task": "pay"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "pay"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "4TF92RWXGHA7PC3XD0B",
+   "results": {},
+   "round_calls": [],
+   "turns": 2
+  },
+  "plan": {
+   "input": {
+    "task": "pay"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "pay"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "done",
+     "turns": 2
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 3,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "",
+    "done"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {
+    "call_B2N4T30YTDB1JS8J8ZM_0": "ApprovalDenied: no"
+   },
+   "input": {
+    "task": "pay"
+   },
+   "requested": [
+    "call_B2N4T30YTDB1JS8J8ZM_0"
+   ],
+   "results": {}
+  }
+ }
+}

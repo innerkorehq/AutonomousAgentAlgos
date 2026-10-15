@@ -1,0 +1,59 @@
+{
+ "01M509MWWFRYZMX8V3HPJ5GEX3": {
+  "fsm": {
+   "input": {},
+   "path": []
+  },
+  "loop": {
+   "input": {},
+   "names": {},
+   "phase": "start",
+   "recalled": [],
+   "request_id": null,
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {},
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {},
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "cancelled",
+    "reason": "not needed",
+    "value": null
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 0,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": []
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {},
+   "requested": [],
+   "results": {}
+  }
+ }
+}

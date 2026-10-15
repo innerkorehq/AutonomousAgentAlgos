@@ -1,0 +1,75 @@
+{
+ "01M509MWVM9HS8DTKPG4H9Q7D1": {
+  "fsm": {
+   "input": {
+    "task": "give n"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "give n"
+   },
+   "names": {},
+   "phase": "start",
+   "recalled": [],
+   "request_id": null,
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "task": "give n"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "{\"n\": 3}",
+   "input": {
+    "task": "give n"
+   },
+   "iterations": 2,
+   "request_id": "RQPQXYAQTBMPF7Y62KK"
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "candidate": "{\"n\": 3}",
+     "iterations": 2
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 2,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "{\"n\": \"x\"}",
+    "{\"n\": 3}"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "give n"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

@@ -1,0 +1,78 @@
+{
+ "01M509MWVPAAGZ23GT1X6YDECP": {
+  "fsm": {
+   "input": {
+    "task": "q"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "q"
+   },
+   "names": {},
+   "phase": "start",
+   "recalled": [],
+   "request_id": null,
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "task": "q"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "q"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "agreement": 0.667,
+     "answer": "42",
+     "samples": 3,
+     "votes": 2
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 3,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "Answer: 42",
+    "Answer: 41",
+    "Answer: 42"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "q"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

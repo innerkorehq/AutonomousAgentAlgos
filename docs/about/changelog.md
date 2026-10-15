@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Event-format safety net** (see [the guide](../guides/evolving-events.md))
+
+- Frozen fixtures of real v0.2.0 logs (every built-in event type, 24 scenarios) and the Projection state they fold to, replayed by the current code on every CI run (`tests/unit/test_event_compat.py`); the trace and CloudEvents exporters are checked against them too.
+- The SQLite, PostgreSQL and Redis stores record a layout version (`await store.schema_version()`): a store written by a newer release is refused (`SchemaTooNew`), 0.1/0.2 stores are adopted as version 1, and a migration framework (ordered, transactional, run once under the setup lock) is in place for the first layout change. Stores now also close their connection pool / thread when opening fails.
+
 **Policy and hygiene**
 
 - [Stability and deprecation policy](../policy/stability.md): versioning while 0.x, stable vs provisional vs experimental modules, an additive-only rule for the event log, and a two-minor-release deprecation window (`aaa._compat.deprecated`).

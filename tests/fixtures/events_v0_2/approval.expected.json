@@ -1,0 +1,79 @@
+{
+ "01M509MWT9VCW2HWP8WCXNQH3R": {
+  "fsm": {
+   "input": {
+    "task": "pay"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "pay"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "1BVZE6QD93C1F0X3F9W",
+   "results": {},
+   "round_calls": [],
+   "turns": 2
+  },
+  "plan": {
+   "input": {
+    "task": "pay"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "pay"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "done",
+     "turns": 2
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 3,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "",
+    "done"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "pay"
+   },
+   "requested": [
+    "call_4PME3A592JW2YRYE98S_0"
+   ],
+   "results": {
+    "call_4PME3A592JW2YRYE98S_0": "sent to acme"
+   }
+  }
+ }
+}

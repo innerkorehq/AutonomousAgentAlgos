@@ -1,0 +1,209 @@
+{
+ "generated_with": "0.2.0",
+ "scenarios": {
+  "approval": [
+   "aaa.approval.granted",
+   "aaa.approval.requested",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.requested",
+   "aaa.tool.started"
+  ],
+  "approval_denied": [
+   "aaa.approval.denied",
+   "aaa.approval.requested",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.failed",
+   "aaa.tool.requested"
+  ],
+  "budget": [
+   "aaa.budget.exceeded",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.requested",
+   "aaa.tool.started"
+  ],
+  "cancel": [
+   "aaa.run.cancel",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "context": [
+   "aaa.context.summary",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.requested",
+   "aaa.tool.started"
+  ],
+  "erased": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.erased",
+   "aaa.run.started"
+  ],
+  "eval_score": [
+   "aaa.eval.score",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "fsm": [
+   "aaa.fsm.ignored",
+   "aaa.fsm.transitioned",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "user.approve",
+   "user.submit"
+  ],
+  "guard": [
+   "aaa.guard.verdict",
+   "aaa.llm.completed",
+   "aaa.llm.failed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.requested",
+   "aaa.tool.started"
+  ],
+  "memory": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.memory.completed",
+   "aaa.memory.requested",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "memory_failed": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.memory.failed",
+   "aaa.memory.requested",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "memory_started": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.memory.completed",
+   "aaa.memory.requested",
+   "aaa.memory.started",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "plan": [
+   "aaa.child.completed",
+   "aaa.child.started",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.plan.created",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.task.started"
+  ],
+  "refine": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.validate.completed",
+   "aaa.validate.requested"
+  ],
+  "router": [
+   "aaa.child.completed",
+   "aaa.child.started",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.route.selected",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "samples": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "session": [
+   "aaa.child.completed",
+   "aaa.child.started",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.session.message",
+   "aaa.session.reply"
+  ],
+  "session_summary": [
+   "aaa.child.completed",
+   "aaa.child.started",
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.session.message",
+   "aaa.session.reply",
+   "aaa.session.summary"
+  ],
+  "stream": [
+   "aaa.llm.completed",
+   "aaa.llm.delta",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started"
+  ],
+  "supervisor": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.failed",
+   "aaa.tool.requested"
+  ],
+  "synthetic_fencing": [
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.fenced",
+   "aaa.tool.requested",
+   "aaa.tool.stale_result",
+   "aaa.tool.started"
+  ],
+  "timeout": [
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.timer.fired"
+  ],
+  "tools": [
+   "aaa.llm.completed",
+   "aaa.llm.requested",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.failed",
+   "aaa.tool.requested",
+   "aaa.tool.started"
+  ],
+  "workflow": [
+   "aaa.node.skipped",
+   "aaa.run.completed",
+   "aaa.run.started",
+   "aaa.tool.completed",
+   "aaa.tool.requested",
+   "aaa.tool.started"
+  ]
+ }
+}

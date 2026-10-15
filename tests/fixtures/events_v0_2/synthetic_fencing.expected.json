@@ -1,0 +1,78 @@
+{
+ "synthetic-fencing": {
+  "fsm": {
+   "input": {
+    "task": "t"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "t"
+   },
+   "names": {
+    "c1": "add"
+   },
+   "phase": "tools",
+   "recalled": [],
+   "request_id": null,
+   "results": {
+    "c1": [
+     true,
+     3
+    ]
+   },
+   "round_calls": [
+    "c1"
+   ],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "task": "t"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "t"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": null,
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": []
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "t"
+   },
+   "requested": [
+    "c1"
+   ],
+   "results": {
+    "c1": 3
+   }
+  }
+ }
+}

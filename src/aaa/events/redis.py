@@ -21,6 +21,7 @@ from typing import Any
 import redis.asyncio as aioredis
 
 from aaa.core.errors import ConcurrencyError
+from aaa.events import migrate
 from aaa.events.distributed import partition_of
 from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
@@ -99,6 +100,11 @@ def _s(x: Any) -> str:
     return x.decode() if isinstance(x, bytes) else str(x)
 
 
+MIGRATIONS: dict[
+    int, Any
+] = {}  # n -> async callable(redis, prefix) migrating layout n-1 to n (empty: version 1 is the 0.1/0.2 layout)
+
+
 class RedisEventStore:
     def __init__(self, r: aioredis.Redis, partitions: int, prefix: str, outbox: bool) -> None:
         # redis-py's asyncio client is typed as sync-or-awaitable unions that type checkers cannot
@@ -122,7 +128,22 @@ class RedisEventStore:
                 f"prefix {prefix!r} was created with {have} partitions, not {partitions}; "
                 "the partition count is fixed for the lifetime of a cluster"
             )
+        vkey = f"{prefix}:meta:schema_version"
+        await r.set(
+            vkey, str(migrate.SCHEMA_VERSION), nx=True
+        )  # a prefix without a version was created by 0.1/0.2: layout 1
+        try:
+            found = int(await r.get(vkey))
+            for v in migrate.pending(found, migrate.SCHEMA_VERSION, MIGRATIONS):
+                await MIGRATIONS[v](r, prefix)
+                await r.set(vkey, str(v))
+        except BaseException:
+            await r.aclose()
+            raise
         return cls(r, partitions, prefix, outbox)
+
+    async def schema_version(self) -> int:
+        return int(await self.r.get(f"{self.prefix}:meta:schema_version"))
 
     # key helpers (all keys of a partition share the hash tag {p})
     def _k(self, p: int, *parts: str) -> str:

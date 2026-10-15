@@ -23,6 +23,7 @@ import asyncpg
 
 from aaa.core.aio import wait_event
 from aaa.core.errors import ConcurrencyError
+from aaa.events import migrate
 from aaa.events.distributed import partition_of
 from aaa.events.event import Event, scrubbed
 from aaa.events.snapshot import StoredSnapshot
@@ -30,6 +31,10 @@ from aaa.events.store import ANY_SEQ, RUN_COMPLETED, RUN_STARTED, RunInfo
 
 log = logging.getLogger("aaa.postgres")
 CHANNEL = "aaa_bus"
+
+MIGRATIONS: dict[
+    int, list[str]
+] = {}  # n -> SQL statements migrating layout n-1 to n (empty: version 1 is the 0.1/0.2 layout)
 
 _SCHEMA = [
     "CREATE TABLE IF NOT EXISTS aaa_meta (key text PRIMARY KEY, value text NOT NULL)",
@@ -68,31 +73,57 @@ class PostgresEventStore:
     ) -> PostgresEventStore:
         pool = await asyncpg.create_pool(dsn, min_size=1, max_size=max_pool)
         self = cls(pool, dsn, partitions, outbox)
-        async with pool.acquire() as c:
-            await c.execute(
-                "SELECT pg_advisory_lock(727001)"
-            )  # serialize concurrent first-time setup
-            try:
-                for stmt in _SCHEMA:
-                    await c.execute(stmt)
+        try:
+            async with pool.acquire() as c:
                 await c.execute(
-                    "INSERT INTO aaa_meta VALUES ('partitions', $1) ON CONFLICT DO NOTHING",
-                    str(partitions),
-                )
-                have = int(await c.fetchval("SELECT value FROM aaa_meta WHERE key='partitions'"))
-                if have != partitions:
-                    raise ValueError(
-                        f"this database was created with {have} partitions, not {partitions}; "
-                        "the partition count is fixed for the lifetime of a cluster"
+                    "SELECT pg_advisory_lock(727001)"
+                )  # serialize concurrent first-time setup
+                try:
+                    for stmt in _SCHEMA:
+                        await c.execute(stmt)
+                    await c.execute(
+                        "INSERT INTO aaa_meta VALUES ('partitions', $1) ON CONFLICT DO NOTHING",
+                        str(partitions),
                     )
-                await c.execute(
-                    "INSERT INTO aaa_partitions (partition) SELECT g FROM generate_series(0, $1 - 1) g ON CONFLICT DO NOTHING",
-                    partitions,
-                )
-            finally:
-                await c.execute("SELECT pg_advisory_unlock(727001)")
+                    have = int(
+                        await c.fetchval("SELECT value FROM aaa_meta WHERE key='partitions'")
+                    )
+                    if have != partitions:
+                        raise ValueError(
+                            f"this database was created with {have} partitions, not {partitions}; "
+                            "the partition count is fixed for the lifetime of a cluster"
+                        )
+                    await c.execute(
+                        "INSERT INTO aaa_partitions (partition) SELECT g FROM generate_series(0, $1 - 1) g ON CONFLICT DO NOTHING",
+                        partitions,
+                    )
+                    await self._migrate(c)
+                finally:
+                    await c.execute("SELECT pg_advisory_unlock(727001)")
+        except BaseException:
+            await pool.close()
+            raise
         await self._start_listener()
         return self
+
+    async def _migrate(self, c: Any) -> None:
+        """Called with the setup advisory lock held. A database without a version row was created by 0.1/0.2: layout 1."""
+        await c.execute(
+            "INSERT INTO aaa_meta VALUES ('schema_version', $1) ON CONFLICT DO NOTHING",
+            str(migrate.SCHEMA_VERSION),
+        )
+        found = int(await c.fetchval("SELECT value FROM aaa_meta WHERE key='schema_version'"))
+        for v in migrate.pending(found, migrate.SCHEMA_VERSION, MIGRATIONS):
+            async with c.transaction():
+                for stmt in MIGRATIONS[v]:
+                    await c.execute(stmt)
+                await c.execute("UPDATE aaa_meta SET value=$1 WHERE key='schema_version'", str(v))
+
+    async def schema_version(self) -> int:
+        async with self.pool.acquire() as c:
+            return int(
+                str(await c.fetchval("SELECT value FROM aaa_meta WHERE key='schema_version'"))
+            )
 
     async def _start_listener(self) -> None:
         try:

@@ -1,0 +1,74 @@
+{
+ "01M509MWWCQJYKSXXPQNVWCRYS": {
+  "fsm": {
+   "input": {
+    "task": "q"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "q"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "AP1T4CNFCXTN71T8KCH",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "task": "q"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "q"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "the answer is 42",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "the answer is 42"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "q"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}

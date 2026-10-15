@@ -104,6 +104,7 @@ nav:
       - Evaluating agents: guides/evals.md
       - Guardrails: guides/guardrails.md
       - Tenancy, redaction, retention: guides/privacy.md
+      - Evolving events and stores: guides/evolving-events.md
       - Testing your agents: guides/testing.md
       - Extending AAA: guides/extending.md
   - Operations:

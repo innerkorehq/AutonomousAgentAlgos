@@ -1,0 +1,249 @@
+{
+ "01M509MWV4Y2SZ46WG58RMJ87K": {
+  "fsm": {
+   "input": {
+    "task": "do two things"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "do two things"
+   },
+   "names": {},
+   "phase": "start",
+   "recalled": [],
+   "request_id": null,
+   "results": {},
+   "round_calls": [],
+   "turns": 0
+  },
+  "plan": {
+   "input": {
+    "task": "do two things"
+   },
+   "plans": 1,
+   "replanning": false,
+   "replans": 0,
+   "steps": {
+    "a": {
+     "deps": [],
+     "description": "step a",
+     "result": {
+      "text": "step result",
+      "turns": 1
+     },
+     "status": "done"
+    },
+    "b": {
+     "deps": [
+      "a"
+     ],
+     "description": "step b",
+     "result": {
+      "text": "step result",
+      "turns": 1
+     },
+     "status": "done"
+    }
+   },
+   "synth": true
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "do two things"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "results": {
+      "a": {
+       "text": "step result",
+       "turns": 1
+      },
+      "b": {
+       "text": "step result",
+       "turns": 1
+      }
+     },
+     "text": "step result"
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 4,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "{\"steps\": [{\"id\": \"a\", \"description\": \"step a\", \"depends_on\": []}, {\"id\": \"b\", \"description\": \"step b\", \"depends_on\": [\"a\"]}]}",
+    "step result"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "do two things"
+   },
+   "requested": [],
+   "results": {}
+  }
+ },
+ "45T0YQ38DB5T5GM707E": {
+  "fsm": {
+   "input": {
+    "task": "Overall task: do two things\nYour step (b): step b\nResults of prerequisite steps: {\"a\": {\"text\": \"step result\", \"turns\": 1}}"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "Overall task: do two things\nYour step (b): step b\nResults of prerequisite steps: {\"a\": {\"text\": \"step result\", \"turns\": 1}}"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "V2CWY9G3E6XJPVMSBKN",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "task": "Overall task: do two things\nYour step (b): step b\nResults of prerequisite steps: {\"a\": {\"text\": \"step result\", \"turns\": 1}}"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "Overall task: do two things\nYour step (b): step b\nResults of prerequisite steps: {\"a\": {\"text\": \"step result\", \"turns\": 1}}"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "step result",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "step result"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "Overall task: do two things\nYour step (b): step b\nResults of prerequisite steps: {\"a\": {\"text\": \"step result\", \"turns\": 1}}"
+   },
+   "requested": [],
+   "results": {}
+  }
+ },
+ "5WQDAN2S9NE95CFYHSE": {
+  "fsm": {
+   "input": {
+    "task": "Overall task: do two things\nYour step (a): step a\nResults of prerequisite steps: {}"
+   },
+   "path": []
+  },
+  "loop": {
+   "input": {
+    "task": "Overall task: do two things\nYour step (a): step a\nResults of prerequisite steps: {}"
+   },
+   "names": {},
+   "phase": "done",
+   "recalled": [],
+   "request_id": "W1JRMW4PTA3A8QWTFP7",
+   "results": {},
+   "round_calls": [],
+   "turns": 1
+  },
+  "plan": {
+   "input": {
+    "task": "Overall task: do two things\nYour step (a): step a\nResults of prerequisite steps: {}"
+   },
+   "plans": 0,
+   "replanning": false,
+   "replans": 0,
+   "steps": {},
+   "synth": false
+  },
+  "refine": {
+   "candidate": "",
+   "input": {
+    "task": "Overall task: do two things\nYour step (a): step a\nResults of prerequisite steps: {}"
+   },
+   "iterations": 0,
+   "request_id": null
+  },
+  "runmeta": {
+   "children": {},
+   "completed": {
+    "kind": "success",
+    "reason": null,
+    "value": {
+     "text": "step result",
+     "turns": 1
+    }
+   },
+   "ledger": {
+    "cost": 0.0,
+    "steps": 1,
+    "tokens": 0
+   }
+  },
+  "samples": {
+   "failures": 0,
+   "texts": [
+    "step result"
+   ]
+  },
+  "session": {
+   "summaries": [],
+   "turns": []
+  },
+  "workflow": {
+   "errors": {},
+   "input": {
+    "task": "Overall task: do two things\nYour step (a): step a\nResults of prerequisite steps: {}"
+   },
+   "requested": [],
+   "results": {}
+  }
+ }
+}
