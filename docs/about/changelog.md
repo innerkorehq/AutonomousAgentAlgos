@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Native providers** (see [LLM gateways](../guides/llm-gateways.md))
+
+- `provider="anthropic"` (`AnthropicClient`: Messages API, tool use, forced-tool structured output, images and PDFs, prompt caching, streaming) and `provider="gemini"` (`GeminiClient`: Generative Language API, function calling, JSON-schema output, images/audio/files, streaming, embeddings). Plain httpx, no vendor SDK; shapes validated against the vendors' SDK types in CI.
+
 **Multimodal messages** (see [the guide](../guides/multimodal.md) and [threat model](../security/multimodal.md))
 
 - `Message.parts`: images, audio and files after the text (`aaa.llm.parts`: `ImagePart`, `AudioPart`, `FilePart`), validated at creation (type vs kind, image signatures, https-only URLs, size). Text-only messages serialize exactly as before.

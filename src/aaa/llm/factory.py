@@ -19,6 +19,22 @@ def register_provider(name: str, factory: Callable[[LLMConfig], LLMClient]) -> N
     _PROVIDERS[name] = factory
 
 
+def _anthropic(config: LLMConfig) -> LLMClient:
+    from aaa.llm.anthropic import AnthropicClient
+
+    return AnthropicClient(config)
+
+
+def _gemini(config: LLMConfig) -> LLMClient:
+    from aaa.llm.gemini import GeminiClient
+
+    return GeminiClient(config)
+
+
+_PROVIDERS["anthropic"] = _anthropic
+_PROVIDERS["gemini"] = _gemini
+
+
 def build_client(config: LLMConfig) -> LLMClient:
     if config.provider == "litellm" and "litellm" not in _PROVIDERS:
         from aaa.llm.litellm_client import LiteLLMClient

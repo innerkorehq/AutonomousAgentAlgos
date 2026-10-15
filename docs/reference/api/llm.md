@@ -78,3 +78,7 @@
 ::: aaa.llm.parts.FilePart
 
 ::: aaa.llm.errors.UnsupportedModality
+
+::: aaa.llm.anthropic.AnthropicClient
+
+::: aaa.llm.gemini.GeminiClient

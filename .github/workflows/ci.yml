@@ -245,6 +245,31 @@ jobs:
           uv pip install --upgrade ${{ matrix.packages }}
           uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard_adapters.py -k ${{ matrix.keyword }}
 
+  native-providers:
+    # The Anthropic and Gemini clients speak the vendors' HTTP APIs without their SDKs; here the SDKs' own types validate the
+    # requests, replies and stream events we build and parse (and the weekly run catches the vendors changing them).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [anthropic, google-genai]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Install ${{ matrix.sdk }}
+        run: uv pip install ${{ matrix.sdk }}
+      - name: Provider tests
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_native_providers.py
+      - name: Newest release (scheduled and manual runs only)
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        run: |
+          uv pip install --upgrade ${{ matrix.sdk }}
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_native_providers.py
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

@@ -10,6 +10,43 @@ client = build_client(gateways.portkey("gpt-4o-mini", provider="openai"))
 LLMHandler(client).attach(engine)
 ```
 
+## Native providers: Anthropic and Gemini
+
+Besides OpenAI-compatible gateways and LiteLLM, AAA speaks two vendors' own APIs directly, over httpx (no vendor SDK, no extra install):
+
+```python
+build_client(LLMConfig(provider="anthropic", model="claude-sonnet-5-5", api_key="${ANTHROPIC_API_KEY}", params={"max_tokens": 2048}))
+build_client(LLMConfig(provider="gemini", model="gemini-2.5-flash", api_key="${GEMINI_API_KEY}"))
+```
+
+```python
+--8<-- "examples/native_providers.py"
+```
+
+```text
+anthropic: The sum is 5.
+gemini: The sum is 5.
+```
+
+| | Anthropic (`aaa.llm.anthropic`) | Gemini (`aaa.llm.gemini`) |
+|---|---|---|
+| Endpoint | `POST /v1/messages`, `x-api-key`, `anthropic-version: 2023-06-01` | `POST /models/{model}:generateContent`, `x-goog-api-key` |
+| System prompt | the separate `system` field | `systemInstruction` |
+| Tools | `tool_use` / `tool_result` blocks; consecutive results merged into one user turn, before any user text | `functionCall` / `functionResponse` parts, results ordered like their calls; a call `id` from the API is echoed back |
+| Structured output (`response_schema`) | a forced tool carrying the schema; its input is returned as the reply text | `responseMimeType: application/json` + `responseJsonSchema` |
+| Attachments | images, PDFs, plain-text documents (no audio) | images, audio, files (`inlineData` / `fileData`) |
+| Usage | cache reads and writes count as prompt tokens; `cached_tokens` = cache reads | thinking tokens count as output; `cached_tokens` from `cachedContentTokenCount` |
+| Extras | `cache=True` adds prompt-caching breakpoints; `max_tokens` is required by the API (default 4096) | embeddings via `batchEmbedContents` (Anthropic has no embeddings API) |
+| Streaming | yes (SSE) | yes (`alt=sse`) |
+
+Errors are mapped onto AAA's classes (`RateLimited` with `retry-after`, `TransientError` for 5xx and Anthropic's 529 *overloaded*, `AuthError`, `ContextOverflow`,
+`ContentFiltered` for blocked prompts and replies), so retries, circuit breakers and the engine behave as with any other client. Parameters the provider does not
+know are dropped with a warning log instead of being sent (both APIs reject unknown fields); Anthropic extended-thinking blocks are neither requested nor round-tripped.
+
+**Verified.** Requests, replies and streaming events are validated against the vendors' own SDK types (`anthropic`, `google-genai`) in CI, and a full tool-loop
+runs through each client against a mock server speaking the real wire format. **Nothing was sent to a live API**; model names, new model-specific parameters and
+server-side behaviour are the things this cannot catch.
+
 ## The `LLMClient` protocol
 
 Anything with these three async methods is an LLM backend:

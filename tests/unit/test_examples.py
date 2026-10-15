@@ -107,6 +107,7 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "native_providers.py": ["anthropic: The sum is 5.", "gemini: The sum is 5."],
     "multimodal.py": [
         "answer: I can see 1 image (image/png, larger than the inline limit: True).",
         "picture bytes in the log: False",
