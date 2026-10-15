@@ -1,6 +1,6 @@
 [project]
 name = "autonomous-agent-algos"
-version = "0.1.0"
+version = "0.1.1"
 description = "Async, event-driven library of production-deployable agent algorithms over arbitrary data."
 readme = "README.md"
 license = "MIT"
