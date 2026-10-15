@@ -15,7 +15,7 @@ uv run mkdocs build --strict
 ```
 
 The Postgres and Redis tests launch temporary servers on random ports and never touch yours (needs `initdb`/`postgres` and `redis-server`
-installed; set `AAA_TEST_PG_BIN` if they are off `PATH`). Without them those tests skip. A full run takes about two minutes. CI (`.github/workflows/ci.yml`) runs lint, pyright and the whole suite on Python 3.11 and 3.12 against real Postgres and Redis services.
+installed; set `AAA_TEST_PG_BIN` if they are off `PATH`). Without them those tests skip. A full run takes about two minutes. CI (`.github/workflows/ci.yml`) runs lint, pyright and the whole suite on Python 3.11, 3.12 and 3.13 against real Postgres and Redis services.
 
 ## Repository map
 

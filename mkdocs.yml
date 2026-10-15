@@ -134,6 +134,7 @@ nav:
           - Validation and core: reference/api/core.md
   - About:
       - Status and limitations: about/limitations.md
+      - Stability and deprecation: policy/stability.md
       - Design decisions: about/design-decisions.md
       - Contributing: about/contributing.md
       - Changelog: about/changelog.md

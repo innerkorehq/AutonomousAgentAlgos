@@ -42,8 +42,8 @@ A short list of the decisions that matter before you run AAA for real.
 
 ## 4. Health and observability
 
-AAA does not yet ship metrics or OpenTelemetry integration (see [limitations](../about/limitations.md)). The event log is
-the audit trail and the raw material:
+AAA exports traces from the event log with the [observer](../guides/observability.md) (OpenTelemetry, Langfuse, LangSmith, Phoenix); it does not yet
+ship metrics (counters and histograms). The event log is the audit trail and the raw material:
 
 - **Per run**: read the stream. `aaa.llm.completed.usage` has tokens, `aaa.run.completed` the outcome, `aaa.tool.started.worker` which worker.
 - **Fleet**: count `aaa.run.completed` by `kind` over time; alert on `failed` and on runs open longer than expected.
@@ -57,7 +57,8 @@ the audit trail and the raw material:
 
 - **Projections** are versioned. A release that changes one bumps its `version`, which makes old snapshots be ignored and
   rebuilt from the log automatically. No migration step.
-- **Event schemas** you register can be upcast on read (`SchemaRegistry.upcaster`).
+- **Event schemas** you register are upcast when an event is **written** (`SchemaRegistry.upcaster`); events already stored are never rewritten or
+  upcast on read, so a fold must keep tolerating every shape the log has ever held. See the [stability policy](../policy/stability.md).
 - **Workers on different versions**: during a rolling deploy, workers share one log. Keep algorithm names/tools compatible, or deploy
   with a short drain.
 - The partition count and table/key layout are part of the data format; check release notes before upgrading across 0.x versions.

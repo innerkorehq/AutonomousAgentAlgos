@@ -98,6 +98,6 @@ Not planned unless demand appears: reinforcement-learning policies, POMDP solver
 
 ## Compatibility
 
-- Python 3.11 and 3.12, both exercised by the full test suite in CI. (3.11 needed two hardening fixes for cancellation; see the changelog.)
+- Python 3.11, 3.12 and 3.13, all exercised by the full test suite in CI. (3.11 needed two hardening fixes for cancellation; see the changelog.)
 - Postgres 14+ is expected to work (tested on 18); Redis 6.2+ (Streams, Lua; tested on 8).
 - Anything speaking the OpenAI chat-completions dialect.

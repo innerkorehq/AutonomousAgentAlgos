@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+**Policy and hygiene**
+
+- [Stability and deprecation policy](../policy/stability.md): versioning while 0.x, stable vs provisional vs experimental modules, an additive-only rule for the event log, and a two-minor-release deprecation window (`aaa._compat.deprecated`).
+- `SECURITY.md`, a root `CONTRIBUTING.md`, Dependabot for Actions and Python dependencies; Python 3.13 is now tested in CI.
+- Docs: deployment guide no longer says OpenTelemetry is missing, and states that schema upcasting happens on write, never on read.
+
 ## 0.2.0 (2026-10-15)
 
 Observability, evals, guardrails and persistent vector search, each with adapters for the common libraries and services. New optional extras: `otel`, `langfuse`, `langsmith`, `phoenix`, `autoevals`, `pgvector`, `qdrant`, `sqlitevec`, `lancedb`, `chroma`, `pinecone`, `bedrock`. Additive: new `OutcomeKind.BLOCKED`, `Hit.metric` / `Hit.higher_is_better`, `LLMHandler(guards=)` and `ToolHandler(guards=)`.
