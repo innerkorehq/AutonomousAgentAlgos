@@ -270,6 +270,28 @@ jobs:
           uv pip install --upgrade ${{ matrix.sdk }}
           uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_native_providers.py
 
+  builtin-tools:
+    # The sandbox runs against real Docker (network denied, memory/pid/timeout/output limits) and the search provider against a real SearXNG.
+    # AAA_REQUIRE_DOCKER turns "no Docker" into a failure, so this job cannot go green by skipping.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AAA_REQUIRE_DOCKER: "1"
+      AAA_TEST_SEARXNG_URL: http://localhost:8888
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Start SearXNG with JSON output enabled
+        run: |
+          mkdir -p searx && printf 'use_default_settings: true\nserver:\n  secret_key: "ci-only-secret"\n  limiter: false\nsearch:\n  formats:\n    - html\n    - json\n' > searx/settings.yml
+          docker run -d --name searxng -p 8888:8080 -v "$PWD/searx/settings.yml:/etc/searxng/settings.yml:ro" searxng/searxng:latest
+          for i in $(seq 1 40); do curl -sf "http://localhost:8888/search?q=test&format=json" >/dev/null && break; sleep 3; done
+      - name: Built-in tool and sandbox tests
+        run: uv run pytest -v -p no:cacheprovider tests/unit/test_builtin_tools.py tests/unit/test_sandbox.py
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

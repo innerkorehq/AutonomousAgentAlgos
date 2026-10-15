@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Built-in tools and a code sandbox** (see [the guide](../guides/builtin-tools.md) and [threat model](../security/tools.md))
+
+- `aaa.tools.builtin`: `http_fetch_tool` (SSRF-hardened: every resolved address must be public, the connection is pinned to the validated address, every redirect re-checked, bodies capped while streaming), `read_file_tool` / `list_files_tool` (confined to a root, secrets and hidden files refused), `web_search_tool` with `SearXNGSearch` (verified against a real SearXNG) and `BraveSearch`.
+- `aaa.sandbox`: `DockerSandbox` (no network, read-only filesystem, no capabilities, resource and output limits, nothing mounted from the host, a new container per run), the dev-only `SubprocessSandbox(unsafe=True)` and `code_exec_tool`, which **requires human approval by default**.
+
 **Ingestion** (see [the guide](../guides/ingestion.md))
 
 - `aaa.ingest`: `DirectoryLoader` / `FileLoader` / `PDFLoader` (extra `pdf`), `RecursiveChunker` (characters or tokens) and `MarkdownChunker`, and `Pipeline.sync()`: incremental (unchanged sources skipped, only changed chunks re-embedded, stale chunks and removed sources deleted), batched and retried embedding, a manifest kept in the store itself, per-tenant, resumable. Run against pgvector, sqlite-vec, Qdrant, LanceDB, Chroma and Pinecone Local in CI.

@@ -107,6 +107,16 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "builtin_tools.py": [
+        "fetch http://169.254.169.254/latest/meta-data/: refused (the host resolves to a non-public address)",
+        "fetch http://localhost/admin: refused (the host resolves to a non-public address)",
+        "fetch http://example.com:6379/: refused (port 6379 is not allowed)",
+        "fetch https://evil.example.com/: refused (this host is not allowed)",
+        "read notes.txt: project notes",
+        "read ../secret.txt: refused (path is outside the allowed directory)",
+        "code_exec waits for approval: code_exec",
+        "The program printed: 5050",
+    ],
     "ingest_docs.py": [
         "first sync : added=2 updated=0 unchanged=0 removed=0 embedded_chunks=3",
         "second sync: added=0 updated=0 unchanged=2 removed=0 embedded_chunks=0",

@@ -44,7 +44,7 @@ Results are untrusted text (snippet length is capped, non-http(s) URLs are dropp
 | # | Threat | `DockerSandbox` decision |
 |---|---|---|
 | 1 | Network access (exfiltration, scanning, downloading malware). | `--network none`. |
-| 2 | Reading or writing the host. | No bind mounts of host paths except a fresh, empty, **read-only** input directory holding only the files the caller passed; read-only root filesystem; a small `noexec` tmpfs for scratch; no Docker socket. |
+| 2 | Reading or writing the host. | **Nothing from the host is mounted**: the program and any input files travel on the container's stdin into its scratch tmpfs, so there is no host path to reach (this also works on remote and rootless Docker); read-only root filesystem; a small `noexec` tmpfs for scratch; no Docker socket. |
 | 3 | Privilege escalation and kernel attack surface. | `--cap-drop ALL`, `--security-opt no-new-privileges`, Docker's default seccomp profile, non-root user, never `--privileged`. |
 | 4 | Resource exhaustion: memory, CPU, processes, disk, output. | `--memory` with swap disabled, `--cpus`, `--pids-limit`, `ulimit` on files and processes, a tmpfs size cap, a **wall-clock timeout** that kills the container, and an output cap that kills it as well. |
 | 5 | State leaking between runs or tenants. | A new container per run, removed afterwards; nothing persists. |
