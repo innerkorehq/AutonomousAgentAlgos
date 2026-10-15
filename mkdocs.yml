@@ -138,6 +138,7 @@ nav:
           - Validation and core: reference/api/core.md
   - About:
       - Multimodal threat model: security/multimodal.md
+      - Tools and sandbox threat model: security/tools.md
       - Status and limitations: about/limitations.md
       - Stability and deprecation: policy/stability.md
       - Design decisions: about/design-decisions.md
