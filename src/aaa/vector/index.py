@@ -4,7 +4,7 @@ work on a persistent store unchanged."""
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, Literal
 
 from aaa.data.capabilities import Embedder
 from aaa.data.index import Doc, Hit
@@ -13,6 +13,8 @@ from aaa.vector.types import (
     DEFAULT_NAMESPACE,
     DeleteWhere,
     DropNamespace,
+    HybridSearch,
+    HybridUnavailable,
     Match,
     Record,
     VectorError,
@@ -36,6 +38,7 @@ class EmbeddingIndex:
         *,
         namespace: str | None = None,
         max_overfetch: int = 1000,
+        hybrid: bool | Literal["auto"] = False,
     ) -> None:
         self.store, self.embedder, self.namespace, self.max_overfetch = (
             store,
@@ -43,6 +46,9 @@ class EmbeddingIndex:
             namespace,
             max_overfetch,
         )
+        # False: dense only. True: dense + keyword (raises HybridUnavailable if the store cannot). "auto": hybrid where the store offers it.
+        self.hybrid: bool | Literal["auto"] = hybrid
+        self._no_hybrid = False
 
     async def upsert(self, docs: list[Doc]) -> None:
         if not docs:
@@ -62,13 +68,38 @@ class EmbeddingIndex:
     async def count(self) -> int:
         return await self.store.count(namespace=self.namespace)
 
-    def _hit(self, m: Match) -> Hit:
+    def _hit(self, m: Match, *, fused: bool = False) -> Hit:
         return Hit(
             doc=Doc(id=m.id, text=m.text, meta=m.meta),
             score=m.score,
-            metric=self.store.metric,
-            higher_is_better=self.store.higher_is_better,
+            metric="rrf" if fused else self.store.metric,
+            higher_is_better=True if fused else self.store.higher_is_better,
         )
+
+    async def _fetch(
+        self,
+        qv: list[float],
+        query: str,
+        n: int,
+        flt: Filter | None,
+        hybrid: bool | Literal["auto"],
+    ) -> tuple[list[Match], bool]:
+        """(matches, were they fused). Hybrid when asked for and the store can; otherwise dense."""
+        if hybrid and not self._no_hybrid:
+            if isinstance(self.store, HybridSearch):
+                try:
+                    return await self.store.query_hybrid(
+                        qv, query, n, filter=flt, namespace=self.namespace
+                    ), True
+                except HybridUnavailable:
+                    if hybrid is True:
+                        raise
+                    self._no_hybrid = True  # "auto": remember, and carry on with dense
+            elif hybrid is True:
+                raise HybridUnavailable(
+                    f"{type(self.store).__name__} does not support hybrid search"
+                )
+        return await self.store.query(qv, n, filter=flt, namespace=self.namespace), False
 
     async def search(
         self,
@@ -76,17 +107,18 @@ class EmbeddingIndex:
         k: int = 5,
         *,
         filter: Callable[[Doc], bool] | Filter | dict[str, Any] | None = None,
+        hybrid: bool | Literal["auto"] | None = None,
     ) -> list[Hit]:
+        """`hybrid=True` fuses keyword relevance with similarity (reciprocal rank; `Hit.metric == "rrf"`). Defaults to the index's setting."""
+        mode = self.hybrid if hybrid is None else hybrid
         qv = (await self.embedder.embed([query]))[0]
         if filter is None or isinstance(filter, Filter | dict):
-            ms = await self.store.query(
-                qv, k, filter=Filter.parse(filter), namespace=self.namespace
-            )
-            return [self._hit(m) for m in ms]
+            ms, fused = await self._fetch(qv, query, k, Filter.parse(filter), mode)
+            return [self._hit(m, fused=fused) for m in ms]
         fetch = max(k * 3, k + 10)
         while True:
-            ms = await self.store.query(qv, fetch, namespace=self.namespace)
-            kept = [h for m in ms if filter((h := self._hit(m)).doc)]
+            ms, fused = await self._fetch(qv, query, fetch, None, mode)
+            kept = [h for m in ms if filter((h := self._hit(m, fused=fused)).doc)]
             if len(kept) >= k or len(ms) < fetch or fetch >= self.max_overfetch:
                 return kept[:k]
             fetch = min(fetch * 4, self.max_overfetch)
@@ -145,6 +177,21 @@ class TenantVectorStore:
     ) -> list[Match]:
         return await self.store.query(
             vector, k, filter=self._filter(filter), namespace=self._ns(namespace)
+        )
+
+    async def query_hybrid(
+        self,
+        vector: Sequence[float],
+        text: str,
+        k: int = 5,
+        *,
+        filter: Filter | None = None,
+        namespace: str | None = None,
+    ) -> list[Match]:
+        if not isinstance(self.store, HybridSearch):
+            raise HybridUnavailable(f"{type(self.store).__name__} does not support hybrid search")
+        return await self.store.query_hybrid(
+            vector, text, k, filter=self._filter(filter), namespace=self._ns(namespace)
         )
 
     async def get(self, ids: Sequence[str], *, namespace: str | None = None) -> list[Record]:

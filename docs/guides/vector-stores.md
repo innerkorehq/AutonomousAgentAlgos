@@ -64,6 +64,27 @@ Refused with `UnsupportedFilter` (never approximated):
 | LanceDB | nothing is refused, but non-namespace filters are not pushed down: a very selective filter on a large namespace scans a lot. Choose pgvector or Qdrant if you need that at scale |
 | pgvector, sqlite-vec, in-memory | everything in the filter language |
 
+## Hybrid search: meaning plus exact words
+
+Similarity finds what a query *means*; it blurs exact strings (an error code, a name, a part number). **Hybrid** search also ranks by keyword relevance and fuses the two
+rankings by reciprocal rank (`score = sum(1 / (60 + rank))`), so `ZX4411` finds the record that contains it even when its embedding is far from the question's.
+
+```python
+index = EmbeddingIndex(store, embedder, hybrid="auto")        # hybrid wherever the store provides it
+hits = await index.search("pump error ZX4411", k=5, hybrid=True)   # or per call; True raises HybridUnavailable if the store cannot
+```
+
+| Store | Keyword leg |
+|---|---|
+| `InMemoryVectorStore` | BM25 (the reference) |
+| `PgVectorStore` | PostgreSQL full-text: a stored generated `tsv` column + GIN index (added automatically, also to tables from 0.2); `text_search_config="english"` picks the language |
+| `SqliteVecStore` | SQLite FTS5 (BM25), kept in step by triggers; rows written before the index existed are indexed on first open; needs an SQLite built with FTS5 (else `HybridUnavailable`, dense search unaffected) |
+| `TenantVectorStore` | passes through to its store, inside the tenant wall |
+
+Qdrant, LanceDB, Chroma and Pinecone do not provide it here (their keyword search needs sparse vectors or an extra index that this release does not manage):
+`hybrid="auto"` falls back to dense search on them, `hybrid=True` raises. Any word of the query may match (OR semantics), query text is never interpreted as search syntax,
+filters and namespaces apply to both legs, and fused scores are RRF values: higher is better, and not comparable with similarity scores (`Hit.metric == "rrf"`).
+
 ## Scores
 
 `Match.score` is a similarity for `cosine` and `dot` (higher is better) and a distance for `euclidean` (lower is better); `Hit` carries `metric` and

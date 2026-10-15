@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Sequence
 
+from aaa.vector import hybrid
 from aaa.vector.filters import Filter, matches
 from aaa.vector.types import DEFAULT_NAMESPACE, Match, Metric, Record, check_vector
 
@@ -55,6 +57,38 @@ class InMemoryVectorStore:
         ]
         scored.sort(key=lambda t: t[0], reverse=self.higher_is_better)
         return [Match(r.id, s, r.text, dict(r.meta)) for s, r in scored[:k]]
+
+    async def query_hybrid(
+        self,
+        vector: Sequence[float],
+        text: str,
+        k: int = 5,
+        *,
+        filter: Filter | None = None,
+        namespace: str | None = None,
+    ) -> list[Match]:
+        """Dense + BM25 (the reference the other stores are compared with)."""
+        dense = await self.query(vector, hybrid.pool(k), filter=filter, namespace=namespace)
+        words = hybrid.tokens(text)
+        docs = [
+            (r, Counter(hybrid.tokens(r.text, limit=10**6)))
+            for r in self._ns(namespace).values()
+            if matches(filter, r.meta)
+        ]
+        n = len(docs)
+        avg = sum(sum(c.values()) for _, c in docs) / max(n, 1)
+        df = {w: sum(1 for _, c in docs if w in c) for w in words}
+        scored = []
+        for r, c in docs:
+            dl, s = sum(c.values()), 0.0
+            for w in words:
+                if c[w] and df[w]:
+                    idf = math.log(1 + (n - df[w] + 0.5) / (df[w] + 0.5))
+                    s += idf * c[w] * 2.5 / (c[w] + 1.5 * (0.25 + 0.75 * dl / max(avg, 1e-9)))
+            if s > 0:
+                scored.append(Match(r.id, s, r.text, dict(r.meta)))
+        scored.sort(key=lambda m: (-m.score, m.id))
+        return hybrid.fuse(dense, scored[: hybrid.pool(k)], k)
 
     async def get(self, ids: Sequence[str], *, namespace: str | None = None) -> list[Record]:
         ns = self._ns(namespace)

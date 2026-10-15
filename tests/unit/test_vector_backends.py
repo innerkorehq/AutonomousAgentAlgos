@@ -400,3 +400,87 @@ class TestPinecone:
 
         with pytest.raises(ValueError, match="index_name"):
             PineconeStore(dimension=DIM)
+
+
+class TestHybridSpecifics:
+    async def test_sqlite_vec_indexes_rows_written_before_the_text_index_existed(self, tmp_path):
+        pytest.importorskip("sqlite_vec")
+        import sqlite3
+
+        from aaa.vector.sqlitevec import SqliteVecStore, _pack
+
+        path = str(tmp_path / "old.db")
+        raw = sqlite3.connect(path)  # the 0.2 layout: no full-text table, no triggers
+        raw.execute(
+            "CREATE TABLE aaa_vectors (ns TEXT NOT NULL, id TEXT NOT NULL, vec BLOB NOT NULL, text TEXT NOT NULL DEFAULT '', meta TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (ns, id))"
+        )
+        raw.execute(
+            "INSERT INTO aaa_vectors VALUES ('default', 'old', ?, 'legacy ZX4411 note', '{}')",
+            [_pack([1.0, 0.0, 0.0])],
+        )
+        raw.commit()
+        raw.close()
+        st = SqliteVecStore(path, dimension=DIM)
+        assert [m.id for m in await st.query_hybrid([0.0, 1.0, 0.0], "ZX4411", 3)] == ["old"]
+        await st.aclose()
+
+    async def test_sqlite_vec_without_fts5_degrades_cleanly(self, monkeypatch):
+        pytest.importorskip("sqlite_vec")
+        from aaa.data.index import Doc
+        from aaa.vector import EmbeddingIndex, HybridUnavailable
+        from aaa.vector.sqlitevec import SqliteVecStore
+
+        monkeypatch.setattr(SqliteVecStore, "_setup_fts", lambda self, db: False)
+        st = SqliteVecStore(":memory:", dimension=DIM)
+        await st.upsert([Record("a", [1.0, 0.0, 0.0], "hello world")])
+        assert [m.id for m in await st.query([1.0, 0.0, 0.0], 1)] == [
+            "a"
+        ]  # dense search is unaffected
+        with pytest.raises(HybridUnavailable):
+            await st.query_hybrid([1.0, 0.0, 0.0], "hello", 1)
+
+        class E:
+            async def embed(self, texts):
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        idx = EmbeddingIndex(st, E())
+        await idx.upsert([Doc(id="b", text="x")])
+        assert [
+            h.doc.id for h in await idx.search("x", hybrid="auto")
+        ]  # falls back to dense, remembers
+        await st.aclose()
+
+    async def test_pgvector_adds_the_text_column_to_a_table_created_by_0_2(self, pg_admin_dsn):
+        asyncpg = pytest.importorskip("asyncpg")
+        from aaa.vector.pgvector import PgVectorStore
+
+        db = "h_" + uuid.uuid4().hex[:12]
+        admin = await asyncpg.connect(pg_admin_dsn)
+        await admin.execute(f'CREATE DATABASE "{db}"')
+        dsn = pg_admin_dsn.rsplit("/", 1)[0] + "/" + db
+        try:
+            conn = await asyncpg.connect(dsn)
+            try:
+                await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            except asyncpg.PostgresError as exc:
+                pytest.skip(f"pgvector extension not available: {exc}")
+            await conn.execute(
+                "CREATE TABLE aaa_vectors (namespace text NOT NULL, id text NOT NULL, embedding vector(3) NOT NULL, text text NOT NULL DEFAULT '', meta jsonb NOT NULL DEFAULT '{}'::jsonb, PRIMARY KEY (namespace, id))"
+            )
+            await conn.execute(
+                "INSERT INTO aaa_vectors VALUES ('default', 'old', '[1,0,0]', 'legacy ZX4411 note', '{}')"
+            )
+            await conn.close()
+            st = PgVectorStore(dsn, dimension=3)
+            await st.setup()
+            assert [m.id for m in await st.query_hybrid([0.0, 1.0, 0.0], "ZX4411", 3)] == ["old"]
+            await st.aclose()
+        finally:
+            await admin.execute(f'DROP DATABASE IF EXISTS "{db}" WITH (FORCE)')
+            await admin.close()
+
+    def test_text_search_configuration_is_validated(self):
+        from aaa.vector.pgvector import PgVectorStore
+
+        with pytest.raises(ValueError, match="text search configuration"):
+            PgVectorStore("postgresql://x/y", dimension=3, text_search_config="english'; DROP")

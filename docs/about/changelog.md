@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Hybrid search**
+
+- `HybridSearch.query_hybrid` is now implemented by `InMemoryVectorStore` (BM25), `PgVectorStore` (full-text `tsv` column, added automatically) and `SqliteVecStore` (FTS5 via triggers), fusing keyword relevance with similarity by reciprocal rank. `EmbeddingIndex(..., hybrid=True|"auto")` / `search(..., hybrid=)`; `Hit.metric == "rrf"`. New `HybridUnavailable`.
+
 **Native providers** (see [LLM gateways](../guides/llm-gateways.md))
 
 - `provider="anthropic"` (`AnthropicClient`: Messages API, tool use, forced-tool structured output, images and PDFs, prompt caching, streaming) and `provider="gemini"` (`GeminiClient`: Generative Language API, function calling, JSON-schema output, images/audio/files, streaming, embeddings). Plain httpx, no vendor SDK; shapes validated against the vendors' SDK types in CI.

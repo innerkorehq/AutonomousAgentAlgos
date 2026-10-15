@@ -21,6 +21,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from aaa.vector import hybrid
 from aaa.vector.filters import And, Eq, Exists, Filter, In, Ne, Not, Or, Range, UnsupportedFilter
 from aaa.vector.types import DEFAULT_NAMESPACE, Match, Metric, Record, check_vector
 
@@ -111,6 +112,7 @@ class PgVectorStore:
         table: str = "aaa_vectors",
         hnsw: bool = True,
         ef_search: int = 100,
+        text_search_config: str = "english",
     ) -> None:
         if not _IDENT.match(table):
             raise ValueError(f"invalid table name {table!r}: letters, digits and underscores only")
@@ -120,6 +122,9 @@ class PgVectorStore:
         self.dimension: int | None = dimension
         self.metric: Metric = metric
         self.table, self.hnsw, self.ef_search = table, hnsw, ef_search
+        if not _IDENT.match(text_search_config):
+            raise ValueError(f"invalid text search configuration {text_search_config!r}")
+        self.text_search_config = text_search_config  # the PostgreSQL text-search configuration (language) used for hybrid search
         self._ready = False
 
     @property
@@ -153,6 +158,14 @@ class PgVectorStore:
                 )
             await c.execute(
                 f'CREATE INDEX IF NOT EXISTS "{self.table}_meta" ON {self._t} USING gin (meta jsonb_path_ops)'
+            )
+            # keyword search for hybrid queries: a stored generated column, so every write path keeps it current (adds the column to tables from 0.2)
+            await c.execute(
+                f"ALTER TABLE {self._t} ADD COLUMN IF NOT EXISTS tsv tsvector "
+                f"GENERATED ALWAYS AS (to_tsvector('{self.text_search_config}'::regconfig, text)) STORED"
+            )
+            await c.execute(
+                f'CREATE INDEX IF NOT EXISTS "{self.table}_tsv" ON {self._t} USING gin (tsv)'
             )
         self._ready = True
         del op
@@ -195,6 +208,34 @@ class PgVectorStore:
             await c.execute(f"SET LOCAL hnsw.ef_search = {int(self.ef_search)}")
             rows = await c.fetch(sql, _vec(vector), namespace or DEFAULT_NAMESPACE, *q.params)
         return [Match(r["id"], float(r["score"]), r["text"], json.loads(r["meta"])) for r in rows]
+
+    async def query_hybrid(
+        self,
+        vector: Sequence[float],
+        text: str,
+        k: int = 5,
+        *,
+        filter: Filter | None = None,
+        namespace: str | None = None,
+    ) -> list[Match]:
+        """Dense similarity fused with PostgreSQL full-text relevance (`ts_rank_cd`) by reciprocal rank. Any word of the query may match."""
+        n = hybrid.pool(k)
+        dense = await self.query(vector, n, filter=filter, namespace=namespace)
+        words = hybrid.tokens(text)
+        if not words:
+            return dense[:k]
+        q = _Sql(4)
+        where = " AND " + compile_filter(filter, q) if filter is not None else ""
+        sql = (
+            f"SELECT id, text, meta FROM {self._t}, to_tsquery('{self.text_search_config}'::regconfig, $1) AS tq "
+            f"WHERE namespace = $2 AND tsv @@ tq{where} ORDER BY ts_rank_cd(tsv, tq) DESC, id LIMIT $3"
+        )
+        async with await self._acquire() as c:
+            rows = await c.fetch(
+                sql, " | ".join(words), namespace or DEFAULT_NAMESPACE, n, *q.params
+            )
+        keyword = [Match(r["id"], 0.0, r["text"], json.loads(r["meta"])) for r in rows]
+        return hybrid.fuse(dense, keyword, k)
 
     async def get(self, ids: Sequence[str], *, namespace: str | None = None) -> list[Record]:
         if not ids:

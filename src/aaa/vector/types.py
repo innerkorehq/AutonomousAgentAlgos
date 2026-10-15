@@ -16,6 +16,10 @@ class VectorError(Exception):
     pass
 
 
+class HybridUnavailable(VectorError):
+    """The store cannot run hybrid search here (for example, its SQLite build has no FTS5)."""
+
+
 class DimensionMismatch(VectorError):
     pass
 
@@ -91,7 +95,7 @@ class DropNamespace(Protocol):
 
 @runtime_checkable
 class HybridSearch(Protocol):
-    """Optional: dense + keyword search fused by the store."""
+    """Optional: dense + keyword search fused by the store (reciprocal-rank fusion, see `aaa.vector.hybrid`). May raise `HybridUnavailable`."""
 
     async def query_hybrid(
         self,

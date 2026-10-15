@@ -19,9 +19,18 @@ import struct
 from collections.abc import Sequence
 from typing import Any
 
+from aaa.vector import hybrid
 from aaa.vector._sync import SyncRunner
 from aaa.vector.filters import And, Eq, Exists, Filter, In, Ne, Not, Or, Range, UnsupportedFilter
-from aaa.vector.types import DEFAULT_NAMESPACE, Match, Metric, Record, VectorError, check_vector
+from aaa.vector.types import (
+    DEFAULT_NAMESPACE,
+    HybridUnavailable,
+    Match,
+    Metric,
+    Record,
+    VectorError,
+    check_vector,
+)
 
 
 def _pack(v: Sequence[float]) -> bytes:
@@ -112,6 +121,7 @@ class SqliteVecStore:
         self.metric: Metric = metric
         self._run = SyncRunner("aaa-sqlitevec")
         self._db: sqlite3.Connection | None = None
+        self._fts = False
 
     @property
     def higher_is_better(self) -> bool:
@@ -135,8 +145,36 @@ class SqliteVecStore:
                 f'CREATE TABLE IF NOT EXISTS "{self.table}" (ns TEXT NOT NULL, id TEXT NOT NULL, vec BLOB NOT NULL, '
                 "text TEXT NOT NULL DEFAULT '', meta TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (ns, id))"
             )
+            self._fts = self._setup_fts(db)
             self._db = db
         return self._db
+
+    def _setup_fts(self, db: sqlite3.Connection) -> bool:
+        """A full-text index kept in step with the table by triggers (so every write path, including REPLACE, deletes and
+        `delete_where`, updates it). False where this SQLite build has no FTS5: hybrid search is then unavailable, dense search is not affected."""
+        t, f = self._t, f'"{self.table}_fts"'
+        db.execute(
+            "PRAGMA recursive_triggers=ON"
+        )  # INSERT OR REPLACE must fire the delete trigger of the row it replaces
+        fresh = (
+            db.execute("SELECT 1 FROM sqlite_master WHERE name=?", [f"{self.table}_fts"]).fetchone()
+            is None
+        )
+        try:
+            db.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS {f} USING fts5(ns UNINDEXED, id UNINDEXED, text, tokenize='unicode61')"
+            )
+        except sqlite3.OperationalError:
+            return False
+        db.execute(
+            f'CREATE TRIGGER IF NOT EXISTS "{self.table}_ai" AFTER INSERT ON {t} BEGIN INSERT INTO {f}(rowid, ns, id, text) VALUES (new.rowid, new.ns, new.id, new.text); END'
+        )
+        db.execute(
+            f'CREATE TRIGGER IF NOT EXISTS "{self.table}_ad" AFTER DELETE ON {t} BEGIN DELETE FROM {f} WHERE rowid = old.rowid; END'
+        )
+        if fresh:  # a table written before the text index existed: index what is already there
+            db.execute(f"INSERT INTO {f}(rowid, ns, id, text) SELECT rowid, ns, id, text FROM {t}")
+        return True
 
     @property
     def _t(self) -> str:
@@ -189,6 +227,42 @@ class SqliteVecStore:
             score = 1.0 - d if self.metric == "cosine" else d
             out.append(Match(id_, float(score), text, json.loads(meta)))
         return out
+
+    async def query_hybrid(
+        self,
+        vector: Sequence[float],
+        text: str,
+        k: int = 5,
+        *,
+        filter: Filter | None = None,
+        namespace: str | None = None,
+    ) -> list[Match]:
+        """Dense similarity fused with FTS5 BM25 keyword relevance (reciprocal rank). Raises `HybridUnavailable` without FTS5."""
+        n = hybrid.pool(k)
+        dense = await self.query(vector, n, filter=filter, namespace=namespace)
+        words = hybrid.tokens(text)
+        if not words:
+            return dense[:k]
+        ns = namespace or DEFAULT_NAMESPACE
+        f = f'"{self.table}_fts"'
+        params: list[Any] = [" OR ".join(f'"{w}"' for w in words), ns]
+        cond = ""
+        if filter is not None:
+            cond = " AND " + compile_filter(filter, params)
+
+        def go() -> list[tuple[Any, ...]]:
+            self._conn()
+            if not self._fts:
+                raise HybridUnavailable("this SQLite build has no FTS5")
+            sql = (
+                f"SELECT m.id, m.text, m.meta FROM {f} JOIN {self._t} m ON m.rowid = {f}.rowid "
+                f"WHERE {f} MATCH ? AND m.ns = ?{cond.replace('meta', 'm.meta')} ORDER BY bm25({f}) LIMIT {int(n)}"
+            )
+            return self._conn().execute(sql, params).fetchall()
+
+        rows = await self._run.run(go)
+        keyword = [Match(i, 0.0, t, json.loads(m)) for i, t, m in rows]
+        return hybrid.fuse(dense, keyword, k)
 
     async def get(self, ids: Sequence[str], *, namespace: str | None = None) -> list[Record]:
         if not ids:
