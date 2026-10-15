@@ -33,7 +33,11 @@ class LLMConfig(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)  # values may use ${VAR}
     chat_path: str = "/chat/completions"  # "" when base_url is already the full endpoint
     embeddings_path: str = "/embeddings"
+    responses_path: str = "/responses"  # for provider="openai_responses"
     timeout_s: float = 60.0
     params: dict[str, Any] = Field(default_factory=dict)  # default request params
     price_in_per_mtok: float | None = None  # optional client-side cost estimation
     price_out_per_mtok: float | None = None
+    price_cached_in_per_mtok: float | None = (
+        None  # price of cache-hit prompt tokens (default: the input price)
+    )

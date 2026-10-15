@@ -51,6 +51,7 @@ class ErasureReport:
     mode: str  # "scrub" | "delete"
     events: int = 0
     blobs: int = 0
+    provider_state: int = 0  # conversation states deleted at the LLM provider
 
 
 @dataclass
@@ -89,9 +90,20 @@ async def erase_run(
         raise RunNotFinished(f"run {run_id!r} is still open; cancel it first or pass force=True")
     events = await engine.retry(lambda: engine.store.read(run_id), "read")
     refs = {b.sha256: b for e in events for b in e.blobs}
+    state_ids = [
+        e.data["state_id"]
+        for e in events
+        if e.type == "aaa.llm.completed" and e.data.get("state_id")
+    ]
     if engine.blobs is not None:  # first: if we crash after this, a rerun still finds the events
         for ref in refs.values():
             await engine.retry(lambda ref=ref: engine.blobs.delete(ref), "blob delete")  # type: ignore[union-attr]
+    forgotten = 0
+    if state_ids:  # first, like blobs: a rerun after a crash must still find the ids. A provider that stored the conversation (Responses API) holds the data too
+        for holder in engine.state_holders:
+            forgotten += await engine.retry(
+                lambda holder=holder: holder.forget_state(state_ids), "provider state delete"
+            )
     n = await engine.retry(
         lambda: engine.store.delete_stream(run_id) if delete else engine.store.scrub(run_id),
         "erase",
@@ -104,12 +116,17 @@ async def erase_run(
             run_id=run_id,
             tenant=first[0].tenant,
             source="engine",
-            data={"reason": reason, "events": n, "blobs": len(refs)},
+            data={
+                "reason": reason,
+                "events": n,
+                "blobs": len(refs),
+                **({"provider_state": forgotten} if forgotten else {}),
+            },
         )
         await engine.retry(lambda: engine.store.append(run_id, [marker]), "append")
     engine._forget(run_id)
     log.info("erased run %s (%s): %d events, %d blobs", run_id, reason, n, len(refs))
-    return ErasureReport(run_id, "delete" if delete else "scrub", n, len(refs))
+    return ErasureReport(run_id, "delete" if delete else "scrub", n, len(refs), forgotten)
 
 
 def _already_erased(completed: Event) -> bool:

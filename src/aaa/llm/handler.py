@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from aaa.core.retry import RetryPolicy
 from aaa.events import Event
 from aaa.llm.client import LLMClient
-from aaa.llm.errors import ContextOverflow, FatalError, LLMError
+from aaa.llm.errors import ContextOverflow, FatalError, LLMError, StateNotFound
 from aaa.llm.streaming import collect
 from aaa.llm.types import LLMRequest, LLMResponse, Message
 from aaa.runtime import Engine
@@ -39,7 +40,13 @@ class LLMHandler:
 
     With `context=` (an `aaa.context.ContextPolicy`) each request is fitted to the model's window just
     before it is sent: the conversation the algorithm and the log hold is never rewritten, only the copy
-    the provider receives. Summaries it writes are persisted as `aaa.context.summary` events."""
+    the provider receives. Summaries it writes are persisted as `aaa.context.summary` events.
+
+    With a server-state client (`ServerStateClient`, e.g. the OpenAI Responses API) the provider holds the
+    conversation: a continuing request sends only the new messages plus the system prompt, referring to the
+    provider's own handle (`state_id`, recorded on each reply). The full conversation is sent instead whenever
+    the context policy had to rewrite it, the provider has lost the state, or no handle is known. Replies carry
+    `state` = `continued` | `fresh` | `fallback` so the saving is visible in the log."""
 
     def __init__(
         self,
@@ -56,11 +63,16 @@ class LLMHandler:
         # request event id -> the conversation AFTER that request's reply. A continuing request
         # (`conv.prev`) is resolved from here; a miss (restart, other process) rebuilds from the log.
         self._convs: OrderedDict[str, list[Message]] = OrderedDict()
+        self._states: dict[
+            str, str
+        ] = {}  # request event id -> the provider's state handle after its reply
         self.max_cached_conversations = 1024
         self.rebuilds = 0
 
     def attach(self, engine: Engine) -> None:
         self.engine = engine
+        if self not in engine.state_holders:
+            engine.state_holders.append(self)  # so erasing a run can delete what the provider holds
         engine.subscribe(REQUESTED, self.handle, concurrency=self.concurrency, group="aaa.llm")
 
     async def _run(self, e: Event, req: LLMRequest) -> LLMResponse:
@@ -89,12 +101,22 @@ class LLMHandler:
         return await collect(gen())
 
     # -- conversation reconstruction -------------------------------------------------------
-    def _remember(self, request_id: str, after_reply: list[Message], prev: str | None) -> None:
+    def _remember(
+        self,
+        request_id: str,
+        after_reply: list[Message],
+        prev: str | None,
+        state_id: str | None = None,
+    ) -> None:
         if prev:  # the chain advanced: the older snapshot of it is superseded
             self._convs.pop(prev, None)
+            self._states.pop(prev, None)
         self._convs[request_id] = after_reply
+        if state_id:
+            self._states[request_id] = state_id
         while len(self._convs) > self.max_cached_conversations:
-            self._convs.popitem(last=False)
+            evicted, _ = self._convs.popitem(last=False)
+            self._states.pop(evicted, None)
 
     async def _rebuild(self, stream: str, prev: str) -> list[Message]:
         """Reconstruct the conversation after `prev`'s reply from the run's log (cache miss)."""
@@ -127,6 +149,8 @@ class LLMHandler:
             )
             reply = await self.engine.hydrate(replies[r.id])
             msgs.append(LLMResponse.model_validate(reply.data["response"]).message)
+            if r.id == prev and reply.data.get("state_id"):
+                self._states[prev] = reply.data["state_id"]
         return msgs
 
     async def _transcript(self, e: Event, req: LLMRequest) -> list[Message]:
@@ -198,24 +222,90 @@ class LLMHandler:
                 )
         return out
 
+    # -- provider-held state ------------------------------------------------------------------
+    @property
+    def _stateful(self) -> bool:
+        return bool(getattr(self.client, "server_state", False))
+
+    def _continuation(
+        self, e: Event, req: LLMRequest, transcript: list[Message]
+    ) -> tuple[str, list[Message]] | None:
+        """(state id, messages to send) if the provider can pick up where it left off, else None."""
+        conv = e.data.get("conv")
+        if conv:
+            state_id = self._states.get(conv["prev"])
+            fresh = transcript[len(transcript) - len(conv["delta"]) :]
+        elif req.resume:
+            state_id = req.resume.state_id
+            seen, fresh = 0, []
+            for m in transcript:
+                if m.role == "system" and seen == 0:
+                    continue  # leading system messages travel as instructions
+                if seen >= req.resume.covered:
+                    fresh.append(m)
+                seen += m.role != "system"
+        else:
+            return None
+        if not state_id or not fresh:
+            return None
+        leading: list[Message] = []
+        for m in transcript:
+            if m.role != "system":
+                break
+            leading.append(m)
+        # tool results must name the PROVIDER's call ids, which differ from AAA's per-call ids
+        pid = {c.id: c.provider_id for m in transcript for c in m.tool_calls if c.provider_id}
+        fresh = [
+            m.model_copy(update={"tool_call_id": pid.get(m.tool_call_id or "", m.tool_call_id)})
+            if m.role == "tool"
+            else m
+            for m in fresh
+        ]
+        return state_id, [*leading, *fresh]
+
+    async def forget_state(self, state_ids: Sequence[str]) -> int:
+        """Delete provider-held state for these handles (used by `engine.erase`)."""
+        fn = getattr(self.client, "forget_state", None)
+        return int(await fn(list(state_ids))) if fn else 0
+
     async def handle(self, e: Event) -> list[Event]:
         tag = e.data.get("tag")
         preps: list[Prepared] = []
+        mode = "fresh"
         try:
             req = LLMRequest.model_validate(e.data["request"])
             transcript = await self._transcript(e, req)
-            req.messages = transcript
+            req.messages, req.continue_from, resume, req.resume = transcript, None, req.resume, None
             if prep := await self._prepare(e, transcript, req):
                 preps.append(prep)
                 req.messages = prep.messages
+            cont = None
+            if self._stateful and (prep is None or prep.report is None):
+                req.resume = resume
+                cont = self._continuation(e, req, transcript)
+                req.resume = None
+            if cont:
+                req.continue_from, req.messages = cont
+                mode = "continued"
             try:
+                resp = await self._run(e, req)
+            except StateNotFound:
+                # the provider no longer has our conversation: send all of it instead
+                if not cont:
+                    raise
+                req.continue_from, req.messages = (
+                    None,
+                    (preps[-1].messages if preps else transcript),
+                )
+                mode = "fallback"
                 resp = await self._run(e, req)
             except ContextOverflow:
                 # our estimate was too optimistic: tighten the budget once and try again
                 if not (retry := await self._prepare(e, transcript, req, pressure=0.5)):
                     raise
                 preps.append(retry)
-                req.messages = retry.messages
+                req.continue_from, req.messages = None, retry.messages
+                mode = "fresh"
                 resp = await self._run(e, req)
         except LLMError as exc:
             return [
@@ -233,14 +323,31 @@ class LLMHandler:
                     },
                 ),
             ]
+        stateful = self._stateful
         for i, call in enumerate(resp.message.tool_calls):
+            if stateful and call.provider_id is None:
+                call.provider_id = call.id  # the provider matches results by ITS id: keep it
             call.id = f"call_{e.id}_{i}"
         # the LOGICAL conversation (not the compacted view) is what later deltas append to
-        self._remember(e.id, [*transcript, resp.message], (e.data.get("conv") or {}).get("prev"))
+        self._remember(
+            e.id,
+            [*transcript, resp.message],
+            (e.data.get("conv") or {}).get("prev"),
+            resp.state_id if stateful else None,
+        )
         report: dict[str, Any] | None = None
         if preps and self.context is not None:
             report = preps[-1].report
-            self.context.observe(req.model, req.messages, req.tools, resp.usage.prompt_tokens)
+            if (
+                not req.continue_from
+            ):  # a continued request's prompt count covers the whole server-side chat
+                self.context.observe(req.model, req.messages, req.tools, resp.usage.prompt_tokens)
+        dumped = resp.model_dump(mode="json")
+        if dumped.get("state_id") is None:  # new optional fields stay out of ordinary events
+            dumped.pop("state_id", None)
+        for c in dumped["message"]["tool_calls"]:
+            if c.get("provider_id") is None:
+                c.pop("provider_id", None)
         return [
             *self._summary_events(e, preps),
             _result(
@@ -248,10 +355,15 @@ class LLMHandler:
                 COMPLETED,
                 {
                     "tag": tag,
-                    "response": resp.model_dump(mode="json"),
+                    "response": dumped,
                     "usage": resp.usage.model_dump(),
                     "cost": resp.cost,
                     **({"context": report} if report else {}),
+                    **(
+                        {"state_id": resp.state_id, "state": mode}
+                        if stateful and resp.state_id
+                        else {}
+                    ),
                 },
             ),
         ]

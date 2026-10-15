@@ -6,9 +6,11 @@ from aaa.llm.client import LLMClient
 from aaa.llm.config import LLMConfig
 from aaa.llm.errors import LLMConfigError
 from aaa.llm.openai_compat import OpenAICompatClient
+from aaa.llm.openai_responses import OpenAIResponsesClient
 
 _PROVIDERS: dict[str, Callable[[LLMConfig], LLMClient]] = {
     "openai_compat": OpenAICompatClient,
+    "openai_responses": OpenAIResponsesClient,
 }
 
 

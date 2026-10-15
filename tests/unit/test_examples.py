@@ -94,6 +94,15 @@ EXPECTED = {
         "summaries written to the log: 4",
         "the log still holds every message: True",
     ],
+    "chat_session.py": [
+        "you: Hi, my name is Ann.",
+        "bot: Noted (1 things said so far).",
+        "bot: Your name is Ann.",
+        "reattached: 3 turns on record",
+        "messages sent to the provider per turn: [2, 2, 2]  (resending the history would be [2, 4, 6])",
+        "turns continued from provider state: [False, True, True]",
+        "erased 4 runs; provider state deleted: 3",
+    ],
     "ensembles.py": [
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",

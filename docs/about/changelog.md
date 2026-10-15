@@ -2,6 +2,12 @@
 
 ## 0.1.0 (2026-10-15)
 
+**Chat sessions and provider-side state** (see [the guide](../guides/sessions.md))
+
+- `aaa.session.SessionManager` / `Session`: a durable multi-turn conversation. A session is a long-lived run; each user message starts a child run of your algorithm; the reply is recorded by whichever worker finishes the turn, so a turn survives the process that sent it. One turn at a time, per-tenant namespacing, whole-conversation budget, streaming, `context=` for long histories (summaries persisted and reused), and erasure/retention as for any run.
+- Provider-held conversation state: `OpenAIResponsesClient` (`provider="openai_responses"`) plus a small `ServerStateClient` protocol. The `LLMHandler` continues from the provider's handle and sends only new messages (within a run and across session turns), falls back to a full request when the state is gone or the context policy rewrote the conversation, and `engine.erase` deletes provider-held state (`ErasureReport.provider_state`).
+- `Usage.cached_tokens` and `price_cached_in_per_mtok`; `Engine.await_event`; `FakeStatefulClient` for tests.
+
 **Context management** (see [the guide](../guides/context.md))
 
 - `aaa.context.ContextPolicy` + `LLMHandler(client, context=policy)`: each request is fitted to the model's window as a send-time *view*; the logical conversation, the delta requests and the log are untouched.

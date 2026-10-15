@@ -117,8 +117,14 @@ class OpenAICompatClient:
         c = self.config
         if c.price_in_per_mtok is None and c.price_out_per_mtok is None:
             return None
+        price_in = c.price_in_per_mtok or 0
+        cached_price = (
+            c.price_cached_in_per_mtok if c.price_cached_in_per_mtok is not None else price_in
+        )
+        fresh = max(0, u.prompt_tokens - u.cached_tokens)
         return (
-            u.prompt_tokens * (c.price_in_per_mtok or 0)
+            fresh * price_in
+            + u.cached_tokens * cached_price
             + u.completion_tokens * (c.price_out_per_mtok or 0)
         ) / 1_000_000
 
@@ -168,6 +174,7 @@ class OpenAICompatClient:
             completion_tokens=u.get("completion_tokens", 0),
             total_tokens=u.get("total_tokens")
             or u.get("prompt_tokens", 0) + u.get("completion_tokens", 0),
+            cached_tokens=(u.get("prompt_tokens_details") or {}).get("cached_tokens") or 0,
         )
         if choice.get("finish_reason") == "content_filter":
             raise ContentFiltered("response blocked by content filter")

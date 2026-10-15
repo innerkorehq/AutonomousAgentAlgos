@@ -3,7 +3,7 @@ from aaa.llm.client import LLMClient, StreamingLLMClient
 from aaa.llm.config import LLMConfig
 from aaa.llm.embedder import LLMEmbedder
 from aaa.llm.factory import build_client, register_provider
-from aaa.llm.fake import FakeLLMClient, ReplayLLMClient
+from aaa.llm.fake import FakeLLMClient, FakeStatefulClient, ReplayLLMClient
 from aaa.llm.handler import LLMHandler
 from aaa.llm.middleware import CircuitBreakerClient, RetryingClient
 from aaa.llm.openai_compat import OpenAICompatClient
@@ -23,6 +23,7 @@ __all__ = [
     "CircuitBreakerClient",
     "EmbedResponse",
     "FakeLLMClient",
+    "FakeStatefulClient",
     "LLMClient",
     "LLMConfig",
     "LLMEmbedder",

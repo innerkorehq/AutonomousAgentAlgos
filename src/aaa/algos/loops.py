@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from aaa.algos.base import finish, llm_request, render_result, task_messages, tool_request
 from aaa.core.outcome import OutcomeKind
 from aaa.events import Event, Projection
-from aaa.llm.types import LLMRequest, LLMResponse, Message
+from aaa.llm.types import LLMRequest, LLMResponse, Message, ResumeHint
 from aaa.runtime import Ctx
 from aaa.tools import ToolRegistry
 
@@ -138,6 +138,14 @@ class LLMLoop:
             model=self.model, messages=messages, params=self.params, stream=self.stream
         )
 
+    def first_request(self, st: LoopState, messages: list[Message]) -> LLMRequest:
+        """The run's first model request. If the input says a provider already holds the start of this
+        conversation (`input["provider_state"] = {"state_id": ..., "covered": n}`, set by sessions), say so."""
+        req = self.request(messages)
+        if hint := st.input.get("provider_state"):
+            req.resume = ResumeHint.model_validate(hint)
+        return req
+
     def on_reply(self, e: Event, st: LoopState, msg: Message) -> list[Event]:
         raise NotImplementedError
 
@@ -168,9 +176,8 @@ class LLMLoop:
             if e.data.get("tag") != "recall":
                 return []
             st = await ctx.project(LOOP)  # recall finished (or failed): now ask the model
-            return [
-                llm_request(e, self.request(self.with_memory(self.initial_messages(st.input), st)))
-            ]
+            msgs = self.with_memory(self.initial_messages(st.input), st)
+            return [llm_request(e, self.first_request(st, msgs))]
         if e.data.get("tag", "main") != "main":
             return []
         st = await ctx.project(LOOP)
@@ -190,7 +197,7 @@ class LLMLoop:
                         )
                     ]
                 log.warning("recall is enabled but no memory backend is attached; skipping it")
-            return [llm_request(e, self.request(self.initial_messages(st.input)))]
+            return [llm_request(e, self.first_request(st, self.initial_messages(st.input)))]
         if e.type == "aaa.llm.failed":
             err = e.data["error"]
             return [finish(e, OutcomeKind.FAILED, reason=f"{err['type']}: {err['message']}")]

@@ -25,7 +25,7 @@ the `data` payload. `aaa.*` is reserved; your own events should use your own pre
 | Type | `data` | Notes |
 |---|---|---|
 | `aaa.llm.requested` | `request` (an `LLMRequest`), `tag`, and optionally `conv: {prev, delta}` | With `conv`, `request.messages` is empty and the messages are `delta`, continuing the conversation after request `prev`'s reply. |
-| `aaa.llm.completed` | `tag`, `response` (an `LLMResponse`), `usage`, `cost` | id `<request>:result`. `usage`/`cost` are top-level so spend accounting never needs the blob. Tool-call ids are rewritten to `call_<request id>_<n>`. |
+| `aaa.llm.completed` | `tag`, `response` (an `LLMResponse`), `usage`, `cost`, `context?`, `state_id?`, `state?` | id `<request>:result`. `usage`/`cost` are top-level so spend accounting never needs the blob. Tool-call ids are rewritten to `call_<request id>_<n>` (the provider's own id is kept as `provider_id` when it matters). With a provider-side-state client, `state_id` is the provider's handle and `state` is `fresh`, `continued` or `fallback`. See [Sessions and provider state](../guides/sessions.md). |
 | `aaa.llm.failed` | `tag`, `error: {type, message, retryable}` | id `<request>:result`. |
 | `aaa.llm.delta` | `text`, `tag` | Only when streaming. Many per call; not part of any outcome. |
 
@@ -47,6 +47,9 @@ the `data` payload. `aaa.*` is reserved; your own events should use your own pre
 
 | Type | `data` |
 |---|---|
+| `aaa.session.message` | `turn`, `text`, `nonce` | `Session.send` (the user speaking), id `<session>:turn:<n>`. A second sender for the same turn collides on the id. See [Sessions](../guides/sessions.md). |
+| `aaa.session.reply` | `turn`, `text`, `kind`, `reason`, `run_id`, `state_id?` | `SessionAlgo`, when the turn's child run finishes, id `<session>:reply:<n>`. |
+| `aaa.session.summary` | `upto`, `prefix_hash`, `text`, `usage`, `cost` | `SessionAlgo` with a `ContextPolicy`: a summary of the first `upto` messages of the history, reused by content hash. |
 | `aaa.context.summary` | `upto`, `prefix_hash`, `text`, `usage`, `cost` | `LLMHandler` with a `ContextPolicy`, id `<request>:summary:<upto>`. A summary of the first `upto` messages of the run's logical conversation, reusable only where their hash matches. See [Context management](../guides/context.md). |
 | `aaa.memory.requested` | `op` (`recall`/`remember`/`forget`), `tag`, `query`/`k`/`filters`/`as_of`, `entries`, `ids` | An algorithm (`ToolLoop(recall=True)`) or you. Scope comes from the event's tenant and metadata, never the payload. See [Long-term memory](../guides/memory.md). |
 | `aaa.memory.started` | `op` | `MemoryHandler`, id `<request>:attempt`. Written before a non-idempotent write so a worker that dies mid-write is reported, not repeated. |

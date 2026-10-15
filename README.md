@@ -39,6 +39,11 @@ async with Engine() as eng:
    This is safe because algorithms decide from folded state, and every derived event has a
    deterministic id, so a repeated reaction is absorbed by the store instead of duplicating.
 
+## Chat sessions and provider-side state
+`SessionManager(engine, algo)` gives a durable multi-turn chat: `await chat.send("...")` remembers earlier turns, survives restarts and the death of the sending process
+(any worker records the reply), is namespaced per tenant, budgeted as a whole, streamable, and erasable. With an `openai_responses` client the provider holds the conversation,
+so each turn sends only what is new.
+
 ## MCP and context management
 `aaa.mcp.MCPClient` connects to any MCP server (stdio, HTTP, or your own session; mcp SDK 1.x and 2.x) and turns its tools into guarded AAA tools,
 with MCP's annotations driving the retry/approval policy. `LLMHandler(client, context=ContextPolicy(max_input_tokens=...))` keeps long runs inside the

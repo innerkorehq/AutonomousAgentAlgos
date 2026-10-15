@@ -18,6 +18,10 @@
 
 ::: aaa.llm.OpenAICompatClient
 
+::: aaa.llm.openai_responses.OpenAIResponsesClient
+
+::: aaa.llm.client.ServerStateClient
+
 ## Gateway presets
 
 ::: aaa.llm.gateways

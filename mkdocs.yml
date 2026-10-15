@@ -96,6 +96,7 @@ nav:
       - Running a cluster: guides/clusters.md
       - The tool execution guard: guides/tool-guard.md
       - Large payloads: guides/large-payloads.md
+      - Chat sessions and provider state: guides/sessions.md
       - Context management: guides/context.md
       - Long-term memory: guides/memory.md
       - Tenancy, redaction, retention: guides/privacy.md
@@ -117,6 +118,7 @@ nav:
           - Tools: reference/api/tools.md
           - LLM: reference/api/llm.md
           - Data: reference/api/data.md
+          - Sessions: reference/api/session.md
           - Context: reference/api/context.md
           - MCP: reference/api/mcp.md
           - Memory: reference/api/memory.md

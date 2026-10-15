@@ -25,6 +25,11 @@ class ContextOverflow(LLMError):
     """Prompt too long for the model; retrying unchanged will not help."""
 
 
+class StateNotFound(LLMError):
+    """The provider no longer holds the conversation state we tried to continue (expired, deleted, or
+    never stored). Not a failure of the request: the handler resends the full conversation."""
+
+
 class ContentFiltered(LLMError):
     pass
 

@@ -10,7 +10,7 @@ async def collect(chunks: AsyncIterator[StreamChunk]) -> LLMResponse:
     """Fold a chunk stream into the same LLMResponse a non-streaming call returns."""
     text: list[str] = []
     calls: dict[int, dict[str, str]] = {}
-    usage, finish, model = Usage(), None, ""
+    usage, finish, model, state_id = Usage(), None, "", None
     async for ch in chunks:
         text.append(ch.text)
         for d in ch.tool_calls:
@@ -21,6 +21,7 @@ async def collect(chunks: AsyncIterator[StreamChunk]) -> LLMResponse:
         usage = ch.usage or usage
         finish = ch.finish_reason or finish
         model = ch.model or model
+        state_id = ch.state_id or state_id
     tool_calls = [
         _parse_tool_call(
             {"id": c["id"], "function": {"name": c["name"], "arguments": c["arguments"] or "{}"}}
@@ -33,4 +34,5 @@ async def collect(chunks: AsyncIterator[StreamChunk]) -> LLMResponse:
         usage=usage,
         model=model,
         finish_reason=finish,
+        state_id=state_id,
     )

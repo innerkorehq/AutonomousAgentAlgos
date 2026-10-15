@@ -123,6 +123,20 @@ HTTP and transport failures become typed errors so retry logic can be correct:
 `error.retryable`). The built-in loops end the run as `failed` on it; write your own algorithm to react differently
 (shrink the prompt on `ContextOverflow`, fall back to a cheaper model on `RateLimited`).
 
+## The OpenAI Responses API
+
+`provider="openai_responses"` speaks `POST /v1/responses` instead of chat completions. Its point is that the provider can **hold the conversation**
+(`store=True`): the `LLMHandler` then sends only the new messages on each turn. It is a different wire format (flat function tools, `function_call` and
+`function_call_output` items, `previous_response_id`), mapped for you.
+
+```python
+client = build_client(LLMConfig(provider="openai_responses", model="gpt-4o", base_url="https://api.openai.com/v1", api_key="${OPENAI_API_KEY}"))
+```
+
+Set `OpenAIResponsesClient(config, store=False)` for stateless use. Embeddings are not part of this API: use an `openai_compat` client for them. The data retention, erasure
+and fallback behavior is described in [Chat sessions and provider-side state](sessions.md#provider-side-state). Both clients report `Usage.cached_tokens`, and
+`LLMConfig.price_cached_in_per_mtok` prices cache hits.
+
 ## Retries and circuit breaking
 
 Opt-in wrappers, applied around any client:

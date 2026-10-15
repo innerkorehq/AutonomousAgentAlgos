@@ -45,7 +45,7 @@ CHILD_COMPLETED = "aaa.child.completed"
 CLAIM_KEY = "$claim"
 # Small, hot fields that stay on the stored event when its payload is claim-checked into a blob,
 # so folds that only need them (spend, call ids, tags) never have to fetch the blob.
-CLAIM_KEEP = ("usage", "cost", "tag", "call_id", "name")
+CLAIM_KEEP = ("usage", "cost", "tag", "call_id", "name", "state_id")
 
 
 class RunMeta(BaseModel):
@@ -223,6 +223,8 @@ class Engine:
         )
         # Long-term memory backends (aaa.memory): `forget_memory` reaches the ones that can erase.
         self.memories: list[Any] = list(memory)
+        # LLM handlers whose providers hold conversation state: erasing a run deletes it there too
+        self.state_holders: list[Any] = []
         self._tenants: dict[str, str | None] = {}  # run id -> tenant, for runs not hosted here
         self._retention_seen: dict[int, float] = {}
         self._runs: dict[str, _Run] = {}
@@ -688,16 +690,19 @@ class Engine:
             # e.g. the store is down past the retry budget. `sweep()` enforces deadlines too.
             log.exception("could not enforce the deadline of run %s; sweep() will retry", run_id)
 
-    async def _await_completed(self, run_id: str) -> Outcome[Any]:
-        # A dropped store connection mid-read is ridden out like any other store call: resubscribe
-        # from the last event seen, backing off per `store_retry` (the budget restarts on progress).
-        pos, attempt, started = 0, 0, time.monotonic()
+    async def await_event(
+        self, stream: str, match: Callable[[Event], bool], *, from_seq: int = 0
+    ) -> Event:
+        """Wait for the first event on `stream` (from `from_seq` on) that `match` accepts. A dropped store
+        connection mid-read is ridden out like any other store call: resubscribe from the last event
+        seen, backing off per `store_retry` (the budget restarts on progress)."""
+        pos, attempt, started = from_seq, 0, time.monotonic()
         while True:
             try:
-                async for e in self.store.subscribe(run_id, pos):
+                async for e in self.store.subscribe(stream, pos):
                     pos, attempt, started = e.seq + 1, 0, time.monotonic()
-                    if e.type == RUN_COMPLETED:
-                        return Outcome(**e.data)
+                    if match(e):
+                        return e
                 raise AssertionError("unreachable")
             except asyncio.CancelledError:
                 raise
@@ -711,13 +716,17 @@ class Engine:
                     policy.max_elapsed_s is not None and spent + delay > policy.max_elapsed_s
                 ):
                     raise StoreUnavailable(
-                        f"waiting for run {run_id} still failing after {attempt} attempt(s): "
+                        f"waiting on {stream} still failing after {attempt} attempt(s): "
                         f"{type(exc).__name__}: {exc}"
                     ) from exc
                 log.warning(
-                    "subscribe to %s failed (%s); resubscribing in %.2fs", run_id, exc, delay
+                    "subscribe to %s failed (%s); resubscribing in %.2fs", stream, exc, delay
                 )
                 await asyncio.sleep(delay)
+
+    async def _await_completed(self, run_id: str) -> Outcome[Any]:
+        done = await self.await_event(run_id, lambda e: e.type == RUN_COMPLETED)
+        return Outcome(**done.data)
 
     # -- runs -------------------------------------------------------------------------------
     async def start(
