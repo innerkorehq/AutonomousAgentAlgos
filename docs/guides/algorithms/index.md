@@ -20,6 +20,10 @@ flowchart TD
     V -->|Another model| C[GeneratorCritic]
     Q -->|Same question, vote| S[SelfConsistency]
     Q -->|Answer from my documents| RG[RAGAgent]
+    Q -->|Learn from failed attempts| RF[Reflexion]
+    Q -->|Several views, then a ruling| DB[Debate]
+    Q -->|Hand off between specialists| SW[Swarm]
+    Q -->|Search over reasoning steps| TT[TreeOfThoughts]
 ```
 
 ## At a glance
@@ -37,6 +41,10 @@ flowchart TD
 | [`FSM`](workflow-fsm.md) | your transition table + events | 0 | `transitions`, `terminal`, `on_enter` | `{"state", "path"}` |
 | [`SelfConsistency`](ensembles-rag.md) | vote | `n` in parallel | `n`, `temperature`, `extract` | `{"answer", "votes", "samples", "agreement"}` |
 | [`RAGAgent`](ensembles-rag.md) | the model | per turn | `index`, `k` | `{"text", "turns"}` |
+| [`Reflexion`](reasoning.md) | your validator or a critic | attempt + evaluation + reflection per trial | `validator`, `max_trials` | `{"candidate", "trials", "reflections"}` |
+| [`Debate`](reasoning.md) | vote or a judge | `agents * (rounds + 1)` (+1) | `agents`, `rounds`, `judge`, `personas` | `{"answer", "rounds", "agents", "answers", "judged"}` |
+| [`Swarm`](reasoning.md) | the model, via transfer tools | per turn | `agents`, `start`, `max_handoffs` | `{"text", "turns", "agent", "handoffs"}` |
+| [`TreeOfThoughts`](reasoning.md) | scores, in code | up to `2 * depth * width * branching` | `depth`, `width`, `branching`, `stop_score` | `{"answer", "score", "path", "depth", "explored"}` |
 
 ## Rules of thumb
 

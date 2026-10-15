@@ -36,6 +36,8 @@ SCENARIOS = sorted(p.name.removesuffix(".jsonl") for p in FIX.glob("*.jsonl"))
 CATALOG = Path(__file__).resolve().parents[2] / "docs" / "reference" / "event-catalog.md"
 # subscription patterns that appear in the catalog table but are not event types
 PATTERNS = {"aaa.engine.cancel", "aaa.llm", "aaa.tool.request", "aaa.validate"}
+# event types added after v0.2.0 (so no v0.2 fixture can exist); a later release freezes its own fixtures
+SINCE_0_3 = {"aaa.swarm.handoff", "aaa.reflexion.feedback"}
 
 
 def streams(name: str) -> dict[str, list[Event]]:
@@ -52,7 +54,9 @@ def test_the_fixtures_exist_and_cover_every_documented_event_type():
     assert manifest["generated_with"] == "0.2.0"
     covered = {t for types in manifest["scenarios"].values() for t in types}
     documented = (
-        set(re.findall(r"^\| `(aaa\.[a-z_.]+)`", CATALOG.read_text(), re.MULTILINE)) - PATTERNS
+        set(re.findall(r"^\| `(aaa\.[a-z_.]+)`", CATALOG.read_text(), re.MULTILINE))
+        - PATTERNS
+        - SINCE_0_3
     )
     assert not (documented - covered), (
         f"event types with no v0.2 fixture: {sorted(documented - covered)}"

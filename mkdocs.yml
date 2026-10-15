@@ -94,6 +94,7 @@ nav:
           - Generate-test-repair and critic: guides/algorithms/refine.md
           - WorkflowGraph and FSM: guides/algorithms/workflow-fsm.md
           - SelfConsistency and RAG: guides/algorithms/ensembles-rag.md
+          - Reflexion, Debate, Swarm, Tree-of-thoughts: guides/algorithms/reasoning.md
           - Writing your own: guides/algorithms/custom.md
       - Persistence and recovery: guides/persistence.md
       - Running a cluster: guides/clusters.md

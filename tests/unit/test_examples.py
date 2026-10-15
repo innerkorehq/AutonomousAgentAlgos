@@ -117,6 +117,12 @@ EXPECTED = {
         "code_exec waits for approval: code_exec",
         "The program printed: 5050",
     ],
+    "reasoning_algorithms.py": [
+        "reflexion: 42 km after 2 trials; lesson: ['State the unit.']",
+        "debate: 12 from rounds [['12', '10', '12'], ['12', '12', '12']]",
+        "swarm: Done: refunded A1 | handoffs: [['triage', 'billing']] | answered by: billing",
+        "tree: (8 / (3 - 8 / 3)) | score 10.0 | at most 24 model calls",
+    ],
     "mcp_server.py": [
         "offered: ['add', 'lookup', 'run_agent']",
         "add: 5",

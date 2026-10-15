@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**New algorithms** (see [the guide](../guides/algorithms/reasoning.md))
+
+- `Reflexion` (fresh attempts informed by written lessons; validator or LLM critic; lessons returned and re-injectable), `Debate` (parallel agents, rounds, judge or vote; at most 7 agents and 4 rounds), `Swarm` with `Agent` (handoffs as tool calls: an agent can only use its own tools, one transfer per turn, capped transfers) and `TreeOfThoughts` (beam search with a hard call bound).
+- `LLMLoop.request_for(state, messages)` hook (ordinary loops are unchanged); `LoopState` gains `agent`/`handoffs`, omitted from its serialized form when unused so existing logs and snapshots fold identically. New events `aaa.swarm.handoff` and `aaa.reflexion.feedback`.
+
 **MCP server and A2A** (see [serving tools over MCP](../guides/mcp.md#serving-your-tools-over-mcp) and the [server guide](../guides/server.md))
 
 - `aaa.mcp.MCPToolServer` / `serve_stdio` / `aaa mcp serve`: expose a `ToolRegistry` to any MCP client (SDK 1.x and 2.x). Approval-gated tools are hidden unless you provide an `approval=` callback; failures never leak internals; tenant and user are fixed by the host; `run_agent` runs algorithms under a server-side budget and is opt-in.

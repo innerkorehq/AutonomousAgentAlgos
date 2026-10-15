@@ -54,3 +54,15 @@
         - strip_fence
         - render_result
         - task_messages
+
+## Reasoning algorithms
+
+::: aaa.algos.Reflexion
+
+::: aaa.algos.Debate
+
+::: aaa.algos.Swarm
+
+::: aaa.algos.Agent
+
+::: aaa.algos.TreeOfThoughts

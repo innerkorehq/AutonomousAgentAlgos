@@ -26,6 +26,12 @@ def llm_request(
     return parent.caused("aaa.llm.requested", data)
 
 
+def stable(event: Event, key: str) -> Event:
+    """The same event with an id fixed by the run and `key`. Fan-in steps ("every sample is in, start the next round") can be
+    reached from more than one triggering event when completions land together; a fixed id makes the store drop the repeat."""
+    return event.model_copy(update={"id": f"{event.run_id}:{key}"})
+
+
 def finish(parent: Event, kind: OutcomeKind, value: Any = None, reason: str | None = None) -> Event:
     return parent.caused(
         "aaa.run.completed", {"kind": kind.value, "value": value, "reason": reason}

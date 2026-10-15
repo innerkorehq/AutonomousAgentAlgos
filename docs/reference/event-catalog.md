@@ -56,6 +56,8 @@ the `data` payload. `aaa.*` is reserved; your own events should use your own pre
 | `aaa.memory.started` | `op` | `MemoryHandler`, id `<request>:attempt`. Written before a non-idempotent write so a worker that dies mid-write is reported, not repeated. |
 | `aaa.memory.completed` | `op`, `tag`, `items` / `ids`, `pending`, `usage`, `cost` | `MemoryHandler`, id `<request>:result`. `usage`/`cost` count towards the run's ledger. |
 | `aaa.memory.failed` | `op`, `tag`, `error` | `MemoryHandler`. A failure here never fails the run. |
+| `aaa.swarm.handoff` | `from`, `to`, `call_id` | `Swarm`, when the model transfers the conversation; the target agent's tools apply from the next model call. |
+| `aaa.reflexion.feedback` | `trial`, `feedback` | `Reflexion`, the evaluator's verdict on a rejected trial (the lesson itself is the `reflect` model call). |
 | `aaa.validate.requested` | `candidate`, `validator`, `context` |
 | `aaa.validate.completed` | `verdict: {ok, feedback, score}` (id `<request>:result`) |
 

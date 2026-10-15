@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from aaa.algos.base import (
     finish,
@@ -60,6 +60,17 @@ class LoopState(BaseModel):
     names: dict[str, str] = Field(default_factory=dict)
     results: dict[str, tuple[bool, Any]] = Field(default_factory=dict)
     recalled: list[str] = Field(default_factory=list)  # memory lines to show the model
+    # Swarm only. An ordinary loop's state serializes exactly as it did before swarms existed (see _omit_swarm_fields).
+    handoffs: list[list[str]] = Field(default_factory=list)  # [from, to] pairs, in order
+    agent: str | None = None  # the active agent, set by `aaa.swarm.handoff`
+
+    @model_serializer(mode="wrap")
+    def _omit_swarm_fields(self, handler: Any) -> dict[str, Any]:
+        d = handler(self)
+        for k in ("agent", "handoffs"):
+            if not d.get(k):
+                d.pop(k, None)
+        return d
 
 
 def apply(st: LoopState, e: Event) -> LoopState:
@@ -80,6 +91,9 @@ def apply(st: LoopState, e: Event) -> LoopState:
         st.phase = "tools" if msg.tool_calls else "done"
         st.round_calls = [c.id for c in msg.tool_calls]
         st.names = {c.id: c.name for c in msg.tool_calls}
+    elif e.type == "aaa.swarm.handoff":
+        st.agent = d["to"]
+        st.handoffs.append([d["from"], d["to"]])
     elif e.type == "aaa.tool.requested":
         if d["call_id"] not in st.round_calls:
             st.round_calls.append(d["call_id"])
@@ -97,7 +111,7 @@ def _memory_line(m: dict[str, Any]) -> str:
     return f"- {m['text']}{since}"
 
 
-LOOP = Projection(LoopState, apply, name="aaa.loop", version=3, state_type=LoopState)
+LOOP = Projection(LoopState, apply, name="aaa.loop", version=4, state_type=LoopState)
 
 
 class LLMLoop:
@@ -145,10 +159,15 @@ class LLMLoop:
             model=self.model, messages=messages, params=self.params, stream=self.stream
         )
 
+    def request_for(self, st: LoopState, messages: list[Message]) -> LLMRequest:
+        """The request for the next model call given the loop state (a hook for loops whose tools or model
+        depend on state, like `Swarm`). Ordinary loops ignore the state."""
+        return self.request(messages)
+
     def first_request(self, st: LoopState, messages: list[Message]) -> LLMRequest:
         """The run's first model request. If the input says a provider already holds the start of this
         conversation (`input["provider_state"] = {"state_id": ..., "covered": n}`, set by sessions), say so."""
-        req = self.request(messages)
+        req = self.request_for(st, messages)
         if hint := st.input.get("provider_state"):
             req.resume = ResumeHint.model_validate(hint)
         return req
@@ -211,7 +230,7 @@ class LLMLoop:
             return self.on_reply(e, st, LLMResponse.model_validate(e.data["response"]).message)
         # tool result: continue once every call of this round has resolved
         if st.phase == "tools" and st.round_calls and all(c in st.results for c in st.round_calls):
-            return [llm_request(e, self.request(self.observations(st)), prev=st.request_id)]
+            return [llm_request(e, self.request_for(st, self.observations(st)), prev=st.request_id)]
         return []
 
     def _budget_exhausted(self, e: Event, st: LoopState) -> Event | None:
