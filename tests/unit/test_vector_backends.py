@@ -179,3 +179,138 @@ class TestQdrant:
         assert m.id == "a" and m.text == "t" and m.meta["_ns"] == "other"
         assert await st.query([1.0, 0.0, 0.0], 5, namespace="other") == []
         await st.aclose()
+
+
+@pytest.mark.parametrize(
+    ("metric", "better"), [("cosine", True), ("dot", True), ("euclidean", False)]
+)
+class TestEmbeddedMetrics:
+    """Score direction and magnitude for the embedded stores."""
+
+    @staticmethod
+    async def _check(st, metric, better):
+        await st.upsert([Record("near", [1.0, 0.0, 0.0]), Record("far", [-1.0, 0.0, 0.0])])
+        ms = await st.query([2.0, 0.0, 0.0], 2)
+        assert st.higher_is_better is better and ms[0].id == "near"
+        assert ms[0].score == pytest.approx(
+            {"cosine": 1.0, "dot": 2.0, "euclidean": 1.0}[metric], abs=1e-4
+        )
+        assert (ms[0].score > ms[1].score) is better
+        await st.aclose()
+
+    async def test_sqlite_vec(self, metric, better):
+        pytest.importorskip("sqlite_vec")
+        from aaa.vector.sqlitevec import SqliteVecStore
+
+        await self._check(SqliteVecStore(":memory:", dimension=DIM, metric=metric), metric, better)
+
+    async def test_lancedb(self, metric, better, tmp_path):
+        pytest.importorskip("lancedb")
+        from aaa.vector.lancedb import LanceDBStore
+
+        await self._check(LanceDBStore(str(tmp_path), dimension=DIM, metric=metric), metric, better)
+
+    async def test_chroma(self, metric, better):
+        pytest.importorskip("chromadb")
+        from aaa.vector.chroma import ChromaStore
+
+        await self._check(
+            ChromaStore(dimension=DIM, metric=metric, prefix="m" + uuid.uuid4().hex[:8]),
+            metric,
+            better,
+        )
+
+
+class TestEmbeddedPersistence:
+    async def test_sqlite_vec_file_survives_reopen(self, tmp_path):
+        pytest.importorskip("sqlite_vec")
+        from aaa.vector.sqlitevec import SqliteVecStore
+
+        a = SqliteVecStore(str(tmp_path / "v.db"), dimension=DIM)
+        await a.upsert([Record("k", [1.0, 2.0, 3.0], "kept", {"n": {"deep": 1}})], namespace="ns")
+        await a.aclose()
+        b = SqliteVecStore(str(tmp_path / "v.db"), dimension=DIM)
+        [r] = await b.get(["k"], namespace="ns")
+        assert r.text == "kept" and r.meta == {"n": {"deep": 1}}
+        await b.aclose()
+
+    async def test_lancedb_directory_survives_reopen(self, tmp_path):
+        pytest.importorskip("lancedb")
+        from aaa.vector.lancedb import LanceDBStore
+
+        a = LanceDBStore(str(tmp_path), dimension=DIM)
+        await a.upsert([Record("k", [1.0, 2.0, 3.0], "kept", {"n": 1})], namespace="ns")
+        await a.aclose()
+        b = LanceDBStore(str(tmp_path), dimension=DIM)
+        [r] = await b.get(["k"], namespace="ns")
+        assert r.text == "kept" and r.meta == {"n": 1} and await b.count(namespace="ns") == 1
+        await b.aclose()
+
+    async def test_chroma_path_survives_reopen(self, tmp_path):
+        pytest.importorskip("chromadb")
+        from aaa.vector.chroma import ChromaStore
+
+        a = ChromaStore(dimension=DIM, path=str(tmp_path))
+        await a.upsert(
+            [Record("k", [1.0, 2.0, 3.0], "kept", {"n": {"deep": 1}, "z": None})], namespace="ns"
+        )
+        await a.aclose()
+        b = ChromaStore(dimension=DIM, path=str(tmp_path))
+        [r] = await b.get(["k"], namespace="ns")
+        assert r.text == "kept" and r.meta == {
+            "n": {"deep": 1},
+            "z": None,
+        }  # exact metadata, nesting and null included
+        await b.aclose()
+
+
+class TestEmbeddedHostileInput:
+    @pytest.mark.parametrize("backend", ["sqlitevec", "lancedb", "chroma"])
+    async def test_odd_ids_namespaces_and_values_are_data(self, backend, tmp_path):
+        evil = "'; DROP TABLE x; -- \" ünïcøde"
+        if backend == "sqlitevec":
+            pytest.importorskip("sqlite_vec")
+            from aaa.vector.sqlitevec import SqliteVecStore
+
+            st = SqliteVecStore(":memory:", dimension=DIM)
+        elif backend == "lancedb":
+            pytest.importorskip("lancedb")
+            from aaa.vector.lancedb import LanceDBStore
+
+            st = LanceDBStore(str(tmp_path), dimension=DIM)
+        else:
+            pytest.importorskip("chromadb")
+            from aaa.vector.chroma import ChromaStore
+
+            st = ChromaStore(dimension=DIM, prefix="h" + uuid.uuid4().hex[:8])
+        await st.upsert([Record(evil, [1.0, 0.0, 0.0], evil, {"k": evil})], namespace=evil)
+        ms = await st.query([1.0, 0.0, 0.0], 5, filter=F("k") == evil, namespace=evil)
+        assert [m.id for m in ms] == [evil] and ms[0].text == evil
+        assert await st.count(namespace=evil) == 1 and await st.count() == 0
+        await st.delete([evil], namespace=evil)
+        assert await st.count(namespace=evil) == 0
+        await st.aclose()
+
+
+class TestChromaRefusals:
+    async def test_filters_chroma_cannot_express_fail_before_any_io(self):
+        pytest.importorskip("chromadb")
+        from aaa.vector import Exists, Not
+        from aaa.vector.chroma import ChromaStore
+
+        class Exploding:
+            def __getattr__(self, name):
+                raise AssertionError(f"touched the client ({name})")
+
+        st = ChromaStore(dimension=DIM, client=Exploding())
+        for bad in (F("name") >= "m", F("x") == None, Exists("x"), Not(F("n") > 3)):
+            with pytest.raises(UnsupportedFilter):
+                await st.query([1.0, 0.0, 0.0], 3, filter=bad)
+
+    def test_negation_is_pushed_to_the_leaves(self):
+        pytest.importorskip("chromadb")
+        from aaa.vector import Not, Or
+        from aaa.vector.chroma import to_where
+
+        w = to_where(Not(Or((F("a") == 1, F("b").is_in(["x", "y"])))))
+        assert w == {"$and": [{"a": {"$ne": 1}}, {"b": {"$nin": ["x", "y"]}}]}

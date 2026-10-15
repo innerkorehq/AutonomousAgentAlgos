@@ -23,3 +23,9 @@
 ::: aaa.vector.LLMReranker
 
 ::: aaa.vector.RerankingIndex
+
+::: aaa.vector.sqlitevec.SqliteVecStore
+
+::: aaa.vector.lancedb.LanceDBStore
+
+::: aaa.vector.chroma.ChromaStore

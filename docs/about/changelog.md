@@ -6,6 +6,10 @@
 
 - `aaa.observe.Observer`: derives traces from the event log (`aaa.trace.spans_from_events`) and exports them whole, parents first, once per cluster, without ever failing a run. Sinks: `InMemorySink`, `ConsoleSink`, `CallableSink`, `OTelSink` and presets `LangfuseSink`, `LangSmithSink`, `PhoenixSink` (extras `otel`, `langfuse`, `langsmith`, `phoenix`). Content capture is opt-in; sampling, tenant filter, incremental export of open sessions, `backfill`.
 
+**More vector stores**
+
+- `SqliteVecStore` (one file, exact, filters in SQL), `LanceDBStore` (embedded; exact filters evaluated client-side in growing batches) and `ChromaStore` (embedded or server; refuses what Chroma cannot express), all through the same contract suite. Extras `sqlitevec`, `lancedb`, `chroma`.
+
 **Vector stores** (see [the guide](../guides/vector-stores.md))
 
 - `aaa.vector`: `VectorStore` protocol (vectors + payload, namespaces, dimension checks), `EmbeddingIndex(store, embedder)` implementing the existing `Index` (so `RAGAgent`, `search_tool` and `NativeMemory` run on a persistent store), a small filter language with identical semantics in every store (`UnsupportedFilter` instead of silent post-filtering), `TenantVectorStore` (namespace wall plus an outer tenant filter), `RerankingIndex`.

@@ -160,6 +160,32 @@ jobs:
           uv pip install --upgrade qdrant-client asyncpg
           uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py
 
+  embedded-vector:
+    # Embedded vector stores run the shared contract suite for real, one library per leg (Chroma is large).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        lib: [sqlite-vec, lancedb, chromadb]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Install ${{ matrix.lib }}
+        run: |
+          uv pip install ${{ matrix.lib }}
+          uv run --no-sync python -c "import ${{ matrix.lib == 'sqlite-vec' && 'sqlite_vec' || matrix.lib }}"
+      - name: Vector store tests
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py -k "not pgvector and not postgres"
+      - name: Newest release (scheduled and manual runs only)
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        run: |
+          uv pip install --upgrade ${{ matrix.lib }}
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py -k "not pgvector and not postgres"
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

@@ -38,6 +38,9 @@ FEATURES: dict[str, set[str]] = {
     "memory": set(),
     "pgvector": set(),
     "qdrant": {"string-range", "raw-vectors"},
+    "sqlitevec": set(),
+    "lancedb": set(),
+    "chroma": {"string-range", "null-values", "exists"},
 }
 
 
@@ -46,7 +49,7 @@ def need(request_param: str, feature: str) -> None:
         pytest.skip(f"{request_param} does not provide {feature}")
 
 
-@pytest.fixture(params=["memory", "pgvector", "qdrant"])
+@pytest.fixture(params=["memory", "pgvector", "qdrant", "sqlitevec", "chroma", "lancedb"])
 def backend(request):
     """Sync fixture: the session-scoped Postgres admin DSN can be requested dynamically from here, but not from an async fixture."""
     return request.param, (
@@ -59,6 +62,37 @@ async def store(backend):
     name, admin_dsn = backend
     if name == "memory":
         yield InMemoryVectorStore(DIM, "cosine")
+        return
+    if name == "lancedb":
+        pytest.importorskip("lancedb")
+        import tempfile
+
+        from aaa.vector.lancedb import LanceDBStore
+
+        with tempfile.TemporaryDirectory() as d:
+            st = LanceDBStore(
+                d, dimension=DIM, initial_batch=8
+            )  # small first batch so the refine loop is exercised
+            yield st
+            await st.aclose()
+        return
+    if name == "chroma":
+        pytest.importorskip("chromadb")
+        import uuid as _uuid
+
+        from aaa.vector.chroma import ChromaStore
+
+        st = ChromaStore(dimension=DIM, prefix="c" + _uuid.uuid4().hex[:10])
+        yield st
+        await st.aclose()
+        return
+    if name == "sqlitevec":
+        pytest.importorskip("sqlite_vec")
+        from aaa.vector.sqlitevec import SqliteVecStore
+
+        st = SqliteVecStore(":memory:", dimension=DIM)
+        yield st
+        await st.aclose()
         return
     if name == "qdrant":
         pytest.importorskip("qdrant_client")
@@ -156,6 +190,14 @@ FILTERS: list[tuple[str, Filter]] = [
 ]
 
 
+FILTER_FEATURE = {
+    "range-str": "string-range",
+    "eq-null": "null-values",
+    "exists": "exists",
+    "not-exists": "exists",
+}
+
+
 async def ids_for(store, f, **kw):
     ms = await store.query(vec(0), 100, filter=f, **kw)
     return {m.id for m in ms}
@@ -219,7 +261,8 @@ async def test_dimension_is_checked_on_upsert_and_query(store):
 @pytest.mark.parametrize(("name", "f"), FILTERS, ids=[n for n, _ in FILTERS])
 async def test_filters_agree_with_the_reference_semantics(store, backend, name, f):
     await store.upsert(corpus())
-    if name == "range-str" and "string-range" in FEATURES[backend[0]]:
+    feature = FILTER_FEATURE.get(name)
+    if feature and feature in FEATURES[backend[0]]:
         from aaa.vector import UnsupportedFilter
 
         with pytest.raises(UnsupportedFilter):  # refused loudly, never approximated
@@ -262,14 +305,17 @@ async def test_delete_where_and_drop_namespace(store, request):
 
 
 # -- tenant wrapper ---------------------------------------------------------------------------
-async def test_tenant_view_cannot_see_or_touch_another_tenants_rows(store):
+async def test_tenant_view_cannot_see_or_touch_another_tenants_rows(store, backend):
     acme, globex = TenantVectorStore(store, "acme"), TenantVectorStore(store, "globex")
     await acme.upsert([Record("a1", vec(1), "acme secret", {"lang": "en"})])
     await globex.upsert([Record("g1", vec(1), "globex secret", {"lang": "en"})])
 
     assert [m.text for m in await acme.query(vec(1), 10)] == ["acme secret"]
     # an 'or' that would match every row must still be walled in
-    wide = Or((F("lang") == "en", F("lang") != "en", Exists("lang")))
+    wide = Or(
+        (F("lang") == "en", F("lang") != "en")
+        + (() if "exists" in FEATURES[backend[0]] else (Exists("lang"),))
+    )
     assert [m.text for m in await acme.query(vec(1), 10, filter=wide)] == ["acme secret"]
     assert [
         m.text

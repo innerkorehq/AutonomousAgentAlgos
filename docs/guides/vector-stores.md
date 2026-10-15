@@ -24,8 +24,11 @@ acme sees: ['acme invoice terms']
 | `InMemoryVectorStore` | none | exact, brute force; the reference the shared tests compare the others to |
 | `PgVectorStore(dsn, dimension=, metric=, table=)` | `pip install "autonomous-agent-algos[pgvector]"` + `CREATE EXTENSION vector` | one table, HNSW index, jsonb metadata, filters become SQL |
 | `QdrantStore(url=… \| location=":memory:", dimension=)` | `pip install "autonomous-agent-algos[qdrant]"` | server, cloud, or in-process |
+| `SqliteVecStore("vectors.db", dimension=)` | `[sqlitevec]` | one file; brute force and exact; every filter runs in SQL before the top-k cut; needs a Python whose `sqlite3` can load extensions |
+| `LanceDBStore("./lance", dimension=)` | `[lancedb]` | embedded directory or object storage; metadata filters are exact but evaluated client-side over growing candidate batches (see below) |
+| `ChromaStore(path=… \| host=…, dimension=)` | `[chroma]` | embedded or server; one collection per namespace; flat metadata (nested objects flattened for filtering, exact original kept) |
 
-Planned (the protocol is ready for them): Pinecone, Chroma, LanceDB, sqlite-vec. Anything else can implement `VectorStore` (about six methods).
+Planned: Pinecone. Anything else can implement `VectorStore` (about six methods).
 
 ```python
 from aaa.vector import EmbeddingIndex
@@ -47,6 +50,17 @@ Filters are applied **before** the top-k cut, so a rare match is found even when
 express a filter raises `UnsupportedFilter` instead of fetching more and filtering afterwards (which silently returns fewer than `k`): Qdrant, for example, cannot do
 ranges over strings. The old `Index` style filter, a Python function over the `Doc`, still works through `EmbeddingIndex`, which over-fetches and keeps asking
 until it has `k` survivors (bounded by `max_overfetch`); prefer a `Filter` on a large index.
+
+### What each store cannot do natively
+
+Refused with `UnsupportedFilter` (never approximated):
+
+| Store | Cannot express |
+|---|---|
+| Qdrant | ranges over strings |
+| Chroma | ranges over strings, equality with `null`, `exists`, negated ranges |
+| LanceDB | nothing is refused, but non-namespace filters are not pushed down: a very selective filter on a large namespace scans a lot. Choose pgvector or Qdrant if you need that at scale |
+| pgvector, sqlite-vec, in-memory | everything in the filter language |
 
 ## Scores
 
@@ -74,5 +88,5 @@ another tenant, raises. `acme.erase()` removes everything of that tenant (tenant
 - **pgvector at scale.** One HNSW index serves the table, and namespace/filter conditions apply to its candidates, so a very selective filter on a huge table can return fewer than `k` rows
   unless you raise `ef_search`; for hard partitions at scale use a table per tenant (`table=`) or partition the table yourself. Table names are validated and quoted; values are always parameters.
 - **Qdrant** keeps every namespace in one collection (an indexed payload field), which is Qdrant's recommended multi-tenant layout; the in-process mode ignores payload indexes.
-- **Verified.** pgvector runs the shared contract suite against a real PostgreSQL with the extension, Qdrant against its real client in `:memory:` mode (not a server): filters, namespaces, tenant escape
+- **Verified.** pgvector runs the shared contract suite against a real PostgreSQL with the extension, Qdrant against its real client in `:memory:` mode (not a server), and sqlite-vec, LanceDB and Chroma against the real libraries (sqlite-vec 0.1.9, LanceDB 0.40, Chroma 1.5): filters, namespaces, tenant escape
   attempts, dimension checks, hostile values. Not run: Qdrant server/cloud, very large indexes, concurrent writers.

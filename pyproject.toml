@@ -41,6 +41,9 @@ autoevals = ["autoevals>=0.0.100", "openai>=1.0"]
 # Vector stores (aaa.vector). pgvector uses asyncpg (same driver as the Postgres event store) and the `vector` extension in your database.
 pgvector = ["asyncpg>=0.29"]
 qdrant = ["qdrant-client>=1.9"]
+sqlitevec = ["sqlite-vec>=0.1.6"]
+lancedb = ["lancedb>=0.20", "pyarrow"]
+chroma = ["chromadb>=1.0"]
 mcp = ["mcp>=1.12,<3"]  # MCP client (aaa.mcp); works with both the 1.x and 2.x SDK
 docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 
