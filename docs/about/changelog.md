@@ -5,6 +5,11 @@
 **Observability** (see [the guide](../guides/observability.md))
 
 - `aaa.observe.Observer`: derives traces from the event log (`aaa.trace.spans_from_events`) and exports them whole, parents first, once per cluster, without ever failing a run. Sinks: `InMemorySink`, `ConsoleSink`, `CallableSink`, `OTelSink` and presets `LangfuseSink`, `LangSmithSink`, `PhoenixSink` (extras `otel`, `langfuse`, `langsmith`, `phoenix`). Content capture is opt-in; sampling, tenant filter, incremental export of open sessions, `backfill`.
+
+**Evals** (see [the guide](../guides/evals.md))
+
+- `aaa.eval`: `Dataset`/`Case` (list, JSONL, CSV), `EvalSuite` (real runs; concurrency, repeats, per-case budget; trajectory, steps, tokens and cost read back from the log), built-in metrics (text, outcome, tool use, budgets, semantic similarity, `LLMJudge`, callables), `EvalReport` (summaries, baseline regression, `assert_ok` for CI, Markdown/JUnit), and `OnlineEvaluator` (sampled, cost-capped scoring of live runs, recorded as `aaa.eval.score` events and sent to score-capable sinks).
+
 - Foundations: `aaa.score.Score`, `aaa.safe.safe_subscribe` (isolated, bounded observer workers).
 
 ## 0.1.1 (2026-10-15)

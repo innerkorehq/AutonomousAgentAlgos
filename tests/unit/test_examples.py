@@ -107,6 +107,12 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "evals.py": [
+        "pass rate 67% over 3 runs",
+        "contains: mean 0.67",
+        "failed: ['vague']",
+        "gate: pass rate 66.7% < 90.0%",
+    ],
     "observability.py": [
         "invoke_agent tool_loop",
         "execute_tool lookup",
