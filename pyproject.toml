@@ -34,6 +34,10 @@ otel = ["opentelemetry-sdk>=1.30", "opentelemetry-exporter-otlp-proto-http>=1.30
 langfuse = ["autonomous-agent-algos[otel]"]
 langsmith = ["autonomous-agent-algos[otel]"]
 phoenix = ["autonomous-agent-algos[otel]"]
+# Eval libraries (aaa.eval.*). Only autoevals is light enough to lock; deepeval, ragas and inspect-ai are installed by hand
+# (see the evals guide) because they are large and pin LangChain/pydantic/protobuf versions that clash with each other.
+# autoevals imports the openai package even when you hand it another client, but does not declare it
+autoevals = ["autoevals>=0.0.100", "openai>=1.0"]
 mcp = ["mcp>=1.12,<3"]  # MCP client (aaa.mcp); works with both the 1.x and 2.x SDK
 docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 

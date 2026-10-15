@@ -74,4 +74,49 @@ Note that the sample sees your production inputs and outputs: a hosted judge rec
 
 ## Third-party eval libraries
 
-DeepEval, Ragas and autoevals metrics wrap as `CallableMetric`s today; dedicated adapters are planned.
+Each library's metrics become AAA metrics, and **their judge calls go through your own `LLMClient`** (your gateway, keys and cost
+reporting) instead of the library's OpenAI default. Install the library you use; AAA imports it only when you import its adapter.
+
+| Library | Adapter | Install |
+|---|---|---|
+| autoevals (Braintrust) | `aaa.eval.autoevals`: `AutoevalsMetric(scorer)`, `openai_shim(client)` | `pip install "autonomous-agent-algos[autoevals]"` (adds `openai`, which autoevals imports but does not declare) |
+| DeepEval | `aaa.eval.deepeval`: `DeepEvalMetric(metric)`, `DeepEvalJudge(client)` | `pip install deepeval` |
+| Ragas | `aaa.eval.ragas`: `RagasMetric(metric)`, `RagasJudge(client)` | `pip install ragas "langchain-community<0.4" "langchain-core<1" "langchain-openai<1"` |
+| Inspect AI | `aaa.eval.inspect`: `aaa_solver(setup)` | `pip install inspect-ai` |
+
+```python
+from autoevals import Factuality, Levenshtein
+from aaa.eval.autoevals import AutoevalsMetric, openai_shim
+
+metrics = [AutoevalsMetric(Levenshtein()), AutoevalsMetric(Factuality(client=openai_shim(llm), model="judge-model"))]
+```
+
+```python
+from deepeval.metrics import AnswerRelevancyMetric
+from aaa.eval.deepeval import DeepEvalMetric, DeepEvalJudge
+
+metrics = [DeepEvalMetric(AnswerRelevancyMetric(model=DeepEvalJudge(llm, model="judge-model")))]
+```
+
+```python
+from ragas.metrics.collections import Faithfulness
+from aaa.eval.ragas import RagasMetric, RagasJudge
+
+metrics = [RagasMetric(Faithfulness(llm=RagasJudge(llm, model="judge-model")))]   # needs case.metadata["retrieval_context"]
+```
+
+- **What a case supplies.** DeepEval gets an `LLMTestCase` with the input, answer, expected output, the tools the run called (read from the
+  trajectory), token cost and latency, plus `metadata["retrieval_context"]`, `["context"]` and `["expected_tools"]` when present. Ragas gets whatever its
+  `ascore` asks for by name: `user_input`, `response`, `reference`, `retrieved_contexts`; anything else, or a missing field, fails the case
+  with a message instead of a guess. autoevals gets `output`, `expected` and `input`.
+- **Judge cost.** The judge objects count their calls, tokens and cost (`judge.calls`, `judge.tokens`, `judge.cost`; `shim.meter` for autoevals),
+  as running totals, not per case.
+- **Inspect AI** keeps its own loop, scorers, sandboxes and logs: `aaa_solver(setup)` runs one AAA run per sample (a fresh engine from
+  `setup`, an async context manager yielding `(engine, algo)`) and returns the answer as the model output, so Inspect's `includes()`,
+  `match()` or model-graded scorers work on it. Inspect's own `model` is used only by model-graded scorers.
+- **Verified.** Each adapter runs the real library's flow in CI against a fake judge model (DeepEval 4.2, Ragas 0.4.3, autoevals 0.4,
+  Inspect AI 0.3), including autoevals' two OpenAI code paths (chat completions and the Responses API it picks for `gpt-5*` names). Not run:
+  live judge models, DeepEval/Ragas agent and multi-turn metrics, Ragas metrics that need embeddings, Inspect sandboxes.
+- **Dependency warning.** Ragas 0.4.3 does not import against the newest LangChain (`langchain_community.chat_models.vertexai`, then
+  `ContextOverflowError`), hence the pins above. DeepEval, Ragas and Inspect AI are large and pin clashing versions of pydantic, protobuf
+  and LangChain: put them in a separate environment if they fight with the rest of your stack.

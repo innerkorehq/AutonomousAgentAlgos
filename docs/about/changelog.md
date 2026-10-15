@@ -10,6 +10,8 @@
 
 - `aaa.eval`: `Dataset`/`Case` (list, JSONL, CSV), `EvalSuite` (real runs; concurrency, repeats, per-case budget; trajectory, steps, tokens and cost read back from the log), built-in metrics (text, outcome, tool use, budgets, semantic similarity, `LLMJudge`, callables), `EvalReport` (summaries, baseline regression, `assert_ok` for CI, Markdown/JUnit), and `OnlineEvaluator` (sampled, cost-capped scoring of live runs, recorded as `aaa.eval.score` events and sent to score-capable sinks).
 
+- Adapters for autoevals, DeepEval, Ragas (metrics judged through your own `LLMClient`) and Inspect AI (`aaa_solver`).
+
 - Foundations: `aaa.score.Score`, `aaa.safe.safe_subscribe` (isolated, bounded observer workers).
 
 ## 0.1.1 (2026-10-15)

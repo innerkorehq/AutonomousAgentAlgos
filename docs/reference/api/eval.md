@@ -17,3 +17,17 @@
 ::: aaa.eval.LLMJudge
 
 ::: aaa.eval.Budgeted
+
+::: aaa.eval.autoevals.AutoevalsMetric
+
+::: aaa.eval.autoevals.openai_shim
+
+::: aaa.eval.deepeval.DeepEvalMetric
+
+::: aaa.eval.deepeval.DeepEvalJudge
+
+::: aaa.eval.ragas.RagasMetric
+
+::: aaa.eval.ragas.RagasJudge
+
+::: aaa.eval.inspect.aaa_solver

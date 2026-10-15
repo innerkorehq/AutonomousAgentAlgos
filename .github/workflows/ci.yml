@@ -77,6 +77,39 @@ jobs:
         # diagnosable from the log instead of just a cancelled job.
         run: uv run pytest -v -p no:cacheprovider -o faulthandler_timeout=120
 
+  eval-adapters:
+    # DeepEval, Ragas and Inspect AI are large and pin clashing dependencies, so each gets its own environment. Their metrics run
+    # their REAL flows here against a fake judge model (tests/unit/test_eval_adapters.py).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lib: autoevals
+            packages: "autoevals openai"
+            keyword: Autoevals
+          - lib: deepeval
+            packages: "deepeval"
+            keyword: DeepEval
+          - lib: ragas
+            # ragas 0.4.x does not import against langchain 1.x (langchain_community.chat_models.vertexai, ContextOverflowError)
+            packages: "ragas langchain-community<0.4 langchain-core<1 langchain-openai<1"
+            keyword: Ragas
+          - lib: inspect-ai
+            packages: "inspect-ai"
+            keyword: Inspect
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Install ${{ matrix.lib }}
+        run: uv pip install ${{ matrix.packages }}
+      - name: Adapter tests
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_eval_adapters.py -k ${{ matrix.keyword }}
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped
