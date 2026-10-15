@@ -9,7 +9,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from aaa.algos.base import finish, llm_request, render_result, task_messages, tool_request
+from aaa.algos.base import (
+    finish,
+    llm_failed,
+    llm_request,
+    render_result,
+    task_messages,
+    tool_request,
+)
 from aaa.core.outcome import OutcomeKind
 from aaa.events import Event, Projection
 from aaa.llm.types import LLMRequest, LLMResponse, Message, ResumeHint
@@ -199,8 +206,7 @@ class LLMLoop:
                 log.warning("recall is enabled but no memory backend is attached; skipping it")
             return [llm_request(e, self.first_request(st, self.initial_messages(st.input)))]
         if e.type == "aaa.llm.failed":
-            err = e.data["error"]
-            return [finish(e, OutcomeKind.FAILED, reason=f"{err['type']}: {err['message']}")]
+            return [llm_failed(e)]
         if e.type == "aaa.llm.completed":
             return self.on_reply(e, st, LLMResponse.model_validate(e.data["response"]).message)
         # tool result: continue once every call of this round has resolved

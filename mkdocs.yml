@@ -101,6 +101,7 @@ nav:
       - Long-term memory: guides/memory.md
       - Observability and tracing: guides/observability.md
       - Evaluating agents: guides/evals.md
+      - Guardrails: guides/guardrails.md
       - Tenancy, redaction, retention: guides/privacy.md
       - Testing your agents: guides/testing.md
       - Extending AAA: guides/extending.md
@@ -126,6 +127,7 @@ nav:
           - Memory: reference/api/memory.md
           - Observability: reference/api/observe.md
           - Evals: reference/api/eval.md
+          - Guardrails: reference/api/guard.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:

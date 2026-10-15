@@ -6,6 +6,12 @@
 
 - `aaa.observe.Observer`: derives traces from the event log (`aaa.trace.spans_from_events`) and exports them whole, parents first, once per cluster, without ever failing a run. Sinks: `InMemorySink`, `ConsoleSink`, `CallableSink`, `OTelSink` and presets `LangfuseSink`, `LangSmithSink`, `PhoenixSink` (extras `otel`, `langfuse`, `langsmith`, `phoenix`). Content capture is opt-in; sampling, tenant filter, incremental export of open sessions, `backfill`.
 
+**Guardrails** (see [the guide](../guides/guardrails.md))
+
+- `aaa.guard`: `GuardPolicy` + `LLMHandler(guards=)` / `ToolHandler(guards=)` check `input`, `output`, `tool_call` and `tool_result`. Actions allow / flag / redact / approve / block; a blocked run ends as the new `OutcomeKind.BLOCKED`, a blocked tool call is a normal tool failure, a poisoned tool result is replaced by a placeholder, `approve` uses the existing approval flow.
+- Every check leaves an `aaa.guard.verdict` event (content hash, never content; counted in spend; shown as a guardrail span). The stored verdict wins, so a classifier is not called twice for the same content, including after a crash; a guard failure follows its `on_error` policy and is never reused. `GuardWatcher` runs guards in observe mode.
+- Guards: regex, deny-list, max length, tool allow-list / escalation, `LLMJudgeGuard` (any model, Llama Guard categories), callable; adapters `OpenAIModerationGuard`, `PresidioGuard` and `PresidioRedactor`.
+
 **Evals** (see [the guide](../guides/evals.md))
 
 - `aaa.eval`: `Dataset`/`Case` (list, JSONL, CSV), `EvalSuite` (real runs; concurrency, repeats, per-case budget; trajectory, steps, tokens and cost read back from the log), built-in metrics (text, outcome, tool use, budgets, semantic similarity, `LLMJudge`, callables), `EvalReport` (summaries, baseline regression, `assert_ok` for CI, Markdown/JUnit), and `OnlineEvaluator` (sampled, cost-capped scoring of live runs, recorded as `aaa.eval.score` events and sent to score-capable sinks).

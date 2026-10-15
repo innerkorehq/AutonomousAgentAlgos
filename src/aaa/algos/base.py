@@ -32,6 +32,13 @@ def finish(parent: Event, kind: OutcomeKind, value: Any = None, reason: str | No
     )
 
 
+def llm_failed(e: Event) -> Event:
+    """End the run because its model call failed: `BLOCKED` when a guardrail did it, else `FAILED`."""
+    err = e.data["error"]
+    kind = OutcomeKind.BLOCKED if err["type"] == "GuardrailBlocked" else OutcomeKind.FAILED
+    return finish(e, kind, reason=f"{err['type']}: {err['message']}")
+
+
 def tool_request(parent: Event, call_id: str, name: str, arguments: dict[str, Any]) -> Event:
     return parent.caused(
         "aaa.tool.requested", {"call_id": call_id, "name": name, "arguments": arguments}

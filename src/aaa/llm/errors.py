@@ -44,3 +44,15 @@ class FatalError(LLMError):
 
 class CircuitOpen(LLMError):
     """Short-circuited by the circuit breaker; not retried."""
+
+
+class GuardrailBlocked(LLMError):
+    """A guardrail blocked the request or the reply. Never retried; algorithms end the run as `OutcomeKind.BLOCKED`."""
+
+    def __init__(
+        self, stage: str = "", categories: list[str] | None = None, guard: str | None = None
+    ) -> None:
+        self.stage, self.categories, self.guard = stage, list(categories or []), guard
+        super().__init__(
+            f"blocked by policy at {stage}: {', '.join(self.categories) or 'unspecified'}"
+        )

@@ -4,7 +4,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from aaa.algos.base import finish, llm_request, parse_json_obj, strip_fence, task_messages
+from aaa.algos.base import (
+    finish,
+    llm_failed,
+    llm_request,
+    parse_json_obj,
+    strip_fence,
+    task_messages,
+)
 from aaa.core.outcome import OutcomeKind
 from aaa.events import Event, Projection
 from aaa.llm.types import LLMRequest, LLMResponse, Message
@@ -79,8 +86,7 @@ class _Refine:
         if e.type == "aaa.run.started":
             return [self._gen(e, task_messages(st.input, self.system))]
         if e.type == "aaa.llm.failed":
-            err = e.data["error"]
-            return [finish(e, OutcomeKind.FAILED, reason=f"{err['type']}: {err['message']}")]
+            return [llm_failed(e)]
         if e.type == "aaa.llm.completed" and tag == "gen":
             cand = strip_fence(st.candidate) if self.extract else st.candidate
             return [self.verify(e, st, cand)]

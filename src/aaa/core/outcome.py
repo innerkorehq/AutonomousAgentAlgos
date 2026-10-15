@@ -14,6 +14,7 @@ class OutcomeKind(StrEnum):
     INVALID_INPUT = "invalid_input"
     CANCELLED = "cancelled"
     FAILED = "failed"
+    BLOCKED = "blocked"  # a guardrail stopped the run (see aaa.guard)
 
 
 class Outcome(BaseModel, Generic[T]):

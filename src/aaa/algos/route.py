@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from aaa.algos.base import finish, llm_request, parse_json_obj
+from aaa.algos.base import finish, llm_failed, llm_request, parse_json_obj
 from aaa.core.ids import stable_id
 from aaa.core.outcome import OutcomeKind
 from aaa.events import Event
@@ -53,7 +53,7 @@ class Router:
             o = e.data["outcome"]
             return [finish(e, OutcomeKind(o["kind"]), o["value"], o.get("reason"))]
         if e.type == "aaa.llm.failed":
-            return [finish(e, OutcomeKind.FAILED, reason=e.data["error"]["message"])]
+            return [llm_failed(e)]
         inp = (await ctx.started()).data["input"]
         if e.type == "aaa.llm.completed":
             obj = (

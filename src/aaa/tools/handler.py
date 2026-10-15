@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aaa.core.aio import raise_if_cancelling, wait_for
 from aaa.core.retry import RetryPolicy
@@ -13,6 +14,10 @@ from aaa.events.guard import ExecutionGuard, LocalGuard
 from aaa.runtime import Engine
 from aaa.tools.guard import Delivery, GuardConfig, LostLease
 from aaa.tools.tool import Tool, ToolArgsError, ToolContext, ToolRegistry
+
+if TYPE_CHECKING:
+    from aaa.guard import GuardPolicy
+    from aaa.guard.enforce import Enforcer
 
 log = logging.getLogger("aaa.tools")
 
@@ -56,8 +61,11 @@ class ToolHandler:
         pools: dict[str, int] | None = None,
         guard: GuardConfig | dict[str, Any] | None = None,
         result_retry: RetryPolicy | None = None,
+        guards: GuardPolicy | None = None,
     ) -> None:
         self.registry = registry
+        self.guards = guards
+        self.enforcer: Enforcer | None = None
         # A tool that already RAN must not lose its result to a store outage: by default keep retrying
         # (with backoff) until it is recorded. A bounded policy makes the handler give up and leave
         # the bus message unacknowledged instead, so the call is redelivered after the outage.
@@ -92,6 +100,10 @@ class ToolHandler:
         self._validate()
         engine._tool_handler = self  # type: ignore[attr-defined]
         self.engine = engine
+        if self.guards is not None:
+            from aaa.guard.enforce import Enforcer
+
+            self.enforcer = Enforcer(engine, self.guards)
         if hasattr(engine.bus, "execution_guard"):
             self._exec_guard = engine.bus.execution_guard()
         self.worker = str(getattr(engine.bus, "member", "local"))
@@ -143,7 +155,23 @@ class ToolHandler:
             ]
         if await self._already_resolved(e):
             return []
-        if t.requires_approval:
+        needs_approval = t.requires_approval
+        if self.enforcer is not None and self.enforcer.policy.enforces("tool_call"):
+            from aaa.guard.types import GuardContext
+
+            args = e.data.get("arguments") or {}
+            ctx = GuardContext(
+                "tool_call", e.run_id, e.tenant, dict(e.meta), tool=name, arguments=args
+            )
+            dec = await self.enforcer.decide(
+                "tool_call", json.dumps(args, default=str, sort_keys=True), ctx, e
+            )
+            # arguments cannot be rewritten (the log holds what the model asked for), so a redaction need is a block
+            if dec.action in ("block", "redact"):
+                cats = ", ".join(dec.categories) or "unspecified"
+                return [self._fail(e, call_id, name, "Blocked", f"blocked by policy: {cats}")]
+            needs_approval = needs_approval or dec.action == "approve"
+        if needs_approval:
             return [
                 e.caused(
                     APPROVAL_REQUESTED,
@@ -358,6 +386,7 @@ class ToolHandler:
                     meta=dict(req.meta),
                 )
                 result = await wait_for(t.invoke(req.data.get("arguments") or {}, ctx), t.timeout_s)
+            result = await self._guard_result(req, t, result)
             return req.caused(
                 COMPLETED,
                 {"call_id": call_id, "name": t.name, "result": result},
@@ -371,6 +400,24 @@ class ToolHandler:
             raise
         except Exception as exc:  # noqa: BLE001 - any tool failure is reported to the model
             return self._fail(req, call_id, t.name, type(exc).__name__, str(exc))
+
+    async def _guard_result(self, req: Event, t: Tool, result: Any) -> Any:
+        """Tool output is untrusted input to the model (indirect prompt injection): a blocked result is replaced by a fixed
+        placeholder before the model, or the log, sees it as a result; a redacted one by its redacted text."""
+        if self.enforcer is None or not self.enforcer.policy.enforces("tool_result"):
+            return result
+        from aaa.guard.types import GuardContext
+
+        text = (
+            result if isinstance(result, str) else json.dumps(result, default=str, sort_keys=True)
+        )
+        ctx = GuardContext("tool_result", req.run_id, req.tenant, dict(req.meta), tool=t.name)
+        dec = await self.enforcer.decide("tool_result", text, ctx, req)
+        if dec.action in ("block", "approve"):
+            return f"[tool result withheld by policy: {', '.join(dec.categories) or 'unspecified'}]"
+        if dec.action == "redact" and dec.text is not None:
+            return dec.text
+        return result
 
     async def _run_attempt(
         self, req: Event, t: Tool, cfg: GuardConfig, *, attempt: int, lease_key: str | None

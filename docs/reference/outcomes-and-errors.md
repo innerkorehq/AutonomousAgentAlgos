@@ -12,6 +12,7 @@ Every run ends with one `Outcome(kind, value, reason)` (`aaa.core`). `outcome.ok
 | `budget_exceeded` | Steps, tokens or cost exceeded their cap. | none | e.g. `steps 21 > 20` |
 | `invalid_input` | Input could not be handled (router chose an unknown route). | none | why |
 | `cancelled` | `RunHandle.cancel`, or the parent run ended. | none | the reason given |
+| `blocked` | A guardrail blocked the user input or the model's reply (`GuardrailBlocked`). See [Guardrails](../guides/guardrails.md). | none | `GuardrailBlocked: blocked by policy at input: <categories>` |
 | `failed` | LLM failure the algorithm cannot recover from, an algorithm exception, an invalid plan, a failing workflow node. | none | `ErrorType: message` |
 
 ## LLM errors (`aaa.llm.errors`)
@@ -22,6 +23,7 @@ All derive from `LLMError` (which derives from `AAAError`) and carry a `retryabl
 |---|---|---|
 | `TransientError` | yes | Timeouts, connection errors, 5xx, malformed gateway replies. |
 | `RateLimited` | yes | 429; has `retry_after` seconds when the gateway sent `Retry-After`. |
+| `GuardrailBlocked` | no | A guardrail blocked the request or reply; algorithms end the run as `blocked`. |
 | `ContextOverflow` | no | Prompt exceeds the model's context window. |
 | `ContentFiltered` | no | The provider blocked the request or response. |
 | `AuthError` | no | 401/403. |

@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from aaa.algos.base import finish, llm_request, parse_json_obj, render_result
+from aaa.algos.base import finish, llm_failed, llm_request, parse_json_obj, render_result
 from aaa.core.ids import stable_id
 from aaa.core.outcome import OutcomeKind
 from aaa.events import Event, Projection
@@ -139,13 +139,7 @@ class PlanAndExecute:
         if e.type == "aaa.run.started":
             return [self._req(e, self.planner_system, f"Task: {st.input.get('task', '')}", "plan")]
         if e.type == "aaa.llm.failed":
-            return [
-                finish(
-                    e,
-                    OutcomeKind.FAILED,
-                    reason=f"{e.data['error']['type']}: {e.data['error']['message']}",
-                )
-            ]
+            return [llm_failed(e)]
         if e.type == "aaa.llm.completed":
             text = LLMResponse.model_validate(e.data["response"]).message.content
             if tag in ("plan", "replan"):

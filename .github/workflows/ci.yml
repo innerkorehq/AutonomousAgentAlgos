@@ -110,6 +110,23 @@ jobs:
       - name: Adapter tests
         run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_eval_adapters.py -k ${{ matrix.keyword }}
 
+  guard-adapters:
+    # Presidio runs for real (with a small spaCy model); the OpenAI SDK validates the shape of the moderation replies we parse.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Install Presidio, its spaCy model, and the OpenAI SDK
+        run: |
+          uv pip install presidio-analyzer presidio-anonymizer openai pip
+          uv run --no-sync python -m spacy download en_core_web_sm
+      - name: Adapter tests
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard.py tests/unit/test_guard_adapters.py
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

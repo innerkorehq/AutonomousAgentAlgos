@@ -34,6 +34,7 @@ class Ledger(BaseModel):
             "aaa.memory.failed",
             "aaa.context.summary",
             "aaa.session.summary",
+            "aaa.guard.verdict",
         ):
             # memory backends and context summaries call an LLM and report what they spent;
             # that is spend, not a 'step'

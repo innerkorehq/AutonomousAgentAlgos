@@ -8,13 +8,15 @@ from typing import TYPE_CHECKING, Any
 from aaa.core.retry import RetryPolicy
 from aaa.events import Event
 from aaa.llm.client import LLMClient
-from aaa.llm.errors import ContextOverflow, FatalError, LLMError, StateNotFound
+from aaa.llm.errors import ContextOverflow, FatalError, GuardrailBlocked, LLMError, StateNotFound
 from aaa.llm.streaming import collect
 from aaa.llm.types import LLMRequest, LLMResponse, Message
 from aaa.runtime import Engine
 
 if TYPE_CHECKING:
     from aaa.context import ContextPolicy, Prepared, SummaryBook
+    from aaa.guard import GuardPolicy
+    from aaa.guard.enforce import Enforcer
 
 log = logging.getLogger("aaa.llm")
 
@@ -55,9 +57,12 @@ class LLMHandler:
         concurrency: int = 8,
         emit_deltas: bool = True,
         context: ContextPolicy | None = None,
+        guards: GuardPolicy | None = None,
     ) -> None:
         self.client, self.concurrency, self.emit_deltas = client, concurrency, emit_deltas
         self.context = context
+        self.guards = guards
+        self.enforcer: Enforcer | None = None
         self._books: OrderedDict[str, SummaryBook] = OrderedDict()
         self.engine: Engine | None = None
         # request event id -> the conversation AFTER that request's reply. A continuing request
@@ -71,13 +76,56 @@ class LLMHandler:
 
     def attach(self, engine: Engine) -> None:
         self.engine = engine
+        if self.guards is not None:
+            from aaa.guard.enforce import Enforcer
+
+            self.enforcer = Enforcer(engine, self.guards)
         if self not in engine.state_holders:
             engine.state_holders.append(self)  # so erasing a run can delete what the provider holds
         engine.subscribe(REQUESTED, self.handle, concurrency=self.concurrency, group="aaa.llm")
 
     async def _run(self, e: Event, req: LLMRequest) -> LLMResponse:
+        """One provider call, inside the guardrails: user input is checked (and possibly redacted) before it is sent,
+        the reply before it is recorded."""
+        enf = self.enforcer
+        if enf is None:
+            return await self._call(e, req)
+        from aaa.guard.types import GuardContext
+
+        if enf.policy.enforces("input"):
+            ctx = GuardContext("input", e.run_id, e.tenant, dict(e.meta))
+            msgs: list[Message] = []
+            for m in req.messages:
+                if m.role == "user" and m.content:
+                    dec = await enf.decide("input", m.content, ctx, e)
+                    if dec.action in (
+                        "block",
+                        "approve",
+                    ):  # no human is in this loop: an approval need is a stop
+                        raise GuardrailBlocked("input", dec.categories, dec.blocked_by)
+                    if dec.action == "redact" and dec.text is not None:
+                        m = m.model_copy(update={"content": dec.text})
+                msgs.append(m)
+            req.messages = msgs
+        resp = await self._call(e, req)
+        if enf.policy.enforces("output") and resp.message.content:
+            dec = await enf.decide(
+                "output",
+                resp.message.content,
+                GuardContext("output", e.run_id, e.tenant, dict(e.meta)),
+                e,
+            )
+            if dec.action in ("block", "approve"):
+                raise GuardrailBlocked("output", dec.categories, dec.blocked_by)
+            if dec.action == "redact" and dec.text is not None:
+                resp.message.content = dec.text
+        return resp
+
+    async def _call(self, e: Event, req: LLMRequest) -> LLMResponse:
         stream = getattr(self.client, "stream", None)
-        if not (req.stream and stream):
+        # An enforcing output guard must see the whole reply before anyone does, so the reply is not streamed.
+        buffered = self.enforcer is not None and self.enforcer.policy.enforces("output")
+        if not (req.stream and stream) or buffered:
             return await self.client.complete(req)
 
         async def gen():

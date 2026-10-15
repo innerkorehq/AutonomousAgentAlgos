@@ -107,6 +107,12 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "guardrails.py": [
+        "the model saw the SSN: False",
+        "the model saw the injection: False",
+        "[tool result withheld by policy: prompt_injection]",
+        "blocked by policy: tool_not_allowed",
+    ],
     "evals.py": [
         "pass rate 67% over 3 runs",
         "contains: mean 0.67",
