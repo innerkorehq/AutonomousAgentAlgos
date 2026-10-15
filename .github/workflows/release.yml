@@ -16,6 +16,8 @@ permissions:
 
 jobs:
   build:
+    # aaa-server has its own tags (server-v*) and its own workflow, release-server.yml.
+    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'server-v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:

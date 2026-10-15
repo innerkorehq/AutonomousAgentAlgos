@@ -292,6 +292,37 @@ jobs:
       - name: Built-in tool and sandbox tests
         run: uv run pytest -v -p no:cacheprovider tests/unit/test_builtin_tools.py tests/unit/test_sandbox.py
 
+  server:
+    # aaa-server against a real Redis (the shared rate limiter) and as a built, installed package (the console script works from a clean venv).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      AAA_TEST_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Server tests
+        run: uv run pytest -v -p no:cacheprovider tests/server
+      - name: Build both packages and check their metadata
+        run: |
+          uv build --all-packages
+          uvx twine check --strict dist/*
+      - name: The built wheels install together and the console scripts run
+        run: |
+          uv venv /tmp/smoke --python 3.12
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          /tmp/smoke/bin/aaa-server serve --help
+          /tmp/smoke/bin/aaa --help
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

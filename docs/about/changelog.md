@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+**HTTP server** (new package `aaa-server`; see [the guide](../guides/server.md) and [threat model](../security/server.md))
+
+- Starlette/ASGI app with SSE: runs (idempotent start, cancel, resumable event stream via `Last-Event-ID`), tool approvals over HTTP (`approve` scope, pending calls only), chat sessions with streaming replies. Tenant, user and metadata come only from the authenticated principal; foreign ids are indistinguishable from missing ones; the event stream is a filtered projection; budgets are a server-side ceiling.
+- Authentication: `ApiKeyAuthenticator` (hashed, constant-time) and `JWTAuthenticator` with `JWKSKeys` (algorithm allow-list, required `exp`/`iss`/`aud`/`sub`, rate-limited key refresh). Admission: `InMemoryRateLimiter`, `RedisRateLimiter` (atomic Lua script), event-sourced `QuotaStore` with race-free reservation, open-run and stream caps.
+- `aaa-server serve module:factory` (loopback by default). The core library gains a read-only `aaa` command: `aaa store check|runs|events`.
+- Core is now `0.3.0.dev0`; `aaa-server` is versioned and released separately (`server-v*` tags).
+
 **Built-in tools and a code sandbox** (see [the guide](../guides/builtin-tools.md) and [threat model](../security/tools.md))
 
 - `aaa.tools.builtin`: `http_fetch_tool` (SSRF-hardened: every resolved address must be public, the connection is pinned to the validated address, every redirect re-checked, bodies capped while streaming), `read_file_tool` / `list_files_tool` (confined to a root, secrets and hidden files refused), `web_search_tool` with `SearXNGSearch` (verified against a real SearXNG) and `BraveSearch`.

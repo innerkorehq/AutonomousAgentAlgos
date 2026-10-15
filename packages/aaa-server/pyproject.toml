@@ -1,0 +1,44 @@
+[project]
+name = "aaa-server"
+version = "0.1.0.dev0"
+description = "HTTP/SSE server for AAA agents: authentication, tenant isolation, rate limits, quotas, approvals."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Innerkore Technologies" }]
+keywords = ["agents", "llm", "asgi", "sse", "multi-tenant", "server"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+requires-python = ">=3.11"
+dependencies = ["autonomous-agent-algos>=0.3.0.dev0", "starlette>=0.37", "uvicorn>=0.30"]
+
+[project.optional-dependencies]
+jwt = ["pyjwt[crypto]>=2.8"]
+redis = ["redis>=5.0"]
+
+[project.scripts]
+aaa-server = "aaa_server.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
+Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/guides/server/"
+Source = "https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/packages/aaa-server"
+Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
+
+[build-system]
+requires = ["hatchling>=1.27,<1.32"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aaa_server"]
+
+[tool.uv.sources]
+autonomous-agent-algos = { workspace = true }

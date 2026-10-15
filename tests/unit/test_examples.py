@@ -117,6 +117,14 @@ EXPECTED = {
         "code_exec waits for approval: code_exec",
         "The program printed: 5050",
     ],
+    "server_quickstart.py": [
+        "no credentials : 401",
+        "waiting for    : wire_money {'amount': 250}",
+        "other tenant   : 404 not_found",
+        "approved       : 202",
+        "event stream   : ['run.started', 'tool.requested', 'approval.requested', 'tool.completed', 'run.completed', 'end']",
+        'outcome        : "Done: sent $250"',
+    ],
     "ingest_docs.py": [
         "first sync : added=2 updated=0 unchanged=0 removed=0 embedded_chunks=3",
         "second sync: added=0 updated=0 unchanged=2 removed=0 embedded_chunks=0",

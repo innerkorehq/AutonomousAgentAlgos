@@ -52,7 +52,7 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          paths: [src]
+          paths: [src, packages/aaa-server/src]
           options:
             docstring_style: google
             show_root_heading: true
@@ -83,6 +83,7 @@ nav:
       - Images, audio and files: guides/multimodal.md
       - Built-in tools and the code sandbox: guides/builtin-tools.md
       - MCP servers: guides/mcp.md
+      - The HTTP server: guides/server.md
       - Human approval: guides/human-approval.md
       - Streaming: guides/streaming.md
       - Algorithms:
@@ -137,6 +138,8 @@ nav:
           - Ingestion: reference/api/ingest.md
           - Built-in tools: reference/api/builtin-tools.md
           - Sandbox: reference/api/sandbox.md
+          - Server: reference/api/server.md
+          - Command line: reference/api/cli.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:

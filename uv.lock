@@ -8,6 +8,40 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[manifest]
+members = [
+    "aaa-server",
+    "autonomous-agent-algos",
+]
+
+[[package]]
+name = "aaa-server"
+version = "0.1.0.dev0"
+source = { editable = "packages/aaa-server" }
+dependencies = [
+    { name = "autonomous-agent-algos" },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+jwt = [
+    { name = "pyjwt", extra = ["crypto"] },
+]
+redis = [
+    { name = "redis" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "autonomous-agent-algos", editable = "." },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'jwt'", specifier = ">=2.8" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
+    { name = "starlette", specifier = ">=0.37" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+provides-extras = ["jwt", "redis"]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
@@ -358,7 +392,7 @@ wheels = [
 
 [[package]]
 name = "autonomous-agent-algos"
-version = "0.2.0"
+version = "0.3.0.dev0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -449,6 +483,7 @@ sqlitevec = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "aaa-server", extra = ["jwt", "redis"] },
     { name = "asyncpg" },
     { name = "pyright" },
     { name = "pytest" },
@@ -495,6 +530,7 @@ provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgrap
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "aaa-server", extras = ["jwt", "redis"], editable = "packages/aaa-server" },
     { name = "asyncpg", specifier = ">=0.29" },
     { name = "pyright" },
     { name = "pytest", specifier = ">=8" },

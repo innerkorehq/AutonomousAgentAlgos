@@ -1,6 +1,6 @@
 [project]
 name = "autonomous-agent-algos"
-version = "0.2.0"
+version = "0.3.0.dev0"
 description = "Async, event-driven library of production-deployable agent algorithms over arbitrary data."
 readme = "README.md"
 license = "MIT"
@@ -54,6 +54,9 @@ pdf = ["pypdf>=4"]
 mcp = ["mcp>=1.12,<3"]  # MCP client (aaa.mcp); works with both the 1.x and 2.x SDK
 docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 
+[project.scripts]
+aaa = "aaa.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
 Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/"
@@ -61,7 +64,13 @@ Source = "https://github.com/innerkorehq/AutonomousAgentAlgos"
 Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff", "pyright", "asyncpg>=0.29", "redis>=5.0"]
+dev = ["pytest>=8", "ruff", "pyright", "asyncpg>=0.29", "redis>=5.0", "aaa-server[jwt,redis]"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+aaa-server = { workspace = true }
 
 [build-system]
 # <1.32: newer hatchling writes core-metadata 2.5, which twine/PyPI do not accept yet.
@@ -84,6 +93,6 @@ extend-exclude = ["*.md", "docs", "site"]
 [tool.pyright]
 # Gate the library, the documented examples and the scripts. Tests are not type-checked: they use
 # duck-typed doubles (flaky stores, frozen backends) and deliberately pass invalid arguments.
-include = ["src", "examples", "scripts"]
+include = ["src", "examples", "scripts", "packages/aaa-server/src"]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"

@@ -82,7 +82,8 @@ is stored in the repository.
 3. Create a GitHub Release tagged `vX.Y.Z` (same number as `pyproject.toml`; the workflow refuses a mismatch). The workflow builds,
    runs `twine check --strict`, installs the wheel in a clean environment and runs the quickstart, repeats the full test suite
    against Postgres and Redis, and then publishes.
-4. A published version can never be replaced; if one is bad, *yank* it on PyPI and release the next number.
+4. **`aaa-server` releases separately.** Set its `version` in `packages/aaa-server/pyproject.toml`, raise its dependency floor on the library from the development version to the released one (the workflow refuses a `dev` floor), release the library first, then create a GitHub Release tagged `server-vX.Y.Z`. The `release-server` workflow publishes with its own trusted publisher (project `aaa-server`, workflow `release-server.yml`, environment `pypi-server`).
+5. A published version can never be replaced; if one is bad, *yank* it on PyPI and release the next number.
 
 ## Pull requests
 

@@ -44,6 +44,10 @@ async with Engine() as eng:
 (any worker records the reply), is namespaced per tenant, budgeted as a whole, streamable, and erasable. With an `openai_responses` client the provider holds the conversation,
 so each turn sends only what is new.
 
+## HTTP server
+`pip install aaa-server` puts an engine behind a port: bearer auth (API keys or JWT/JWKS), tenants taken only from the credential, rate limits and event-sourced quotas, server-side budgets,
+tool approvals over HTTP and resumable SSE event streams. `aaa-server serve myapp.server:build` listens on loopback by default. See the [server guide](docs/guides/server.md).
+
 ## MCP and context management
 `aaa.mcp.MCPClient` connects to any MCP server (stdio, HTTP, or your own session; mcp SDK 1.x and 2.x) and turns its tools into guarded AAA tools,
 with MCP's annotations driving the retry/approval policy. `LLMHandler(client, context=ContextPolicy(max_input_tokens=...))` keeps long runs inside the
