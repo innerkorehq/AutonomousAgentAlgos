@@ -107,6 +107,13 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "ingest_docs.py": [
+        "first sync : added=2 updated=0 unchanged=0 removed=0 embedded_chunks=3",
+        "second sync: added=0 updated=0 unchanged=2 removed=0 embedded_chunks=0",
+        "after edit : added=0 updated=1 unchanged=1 removed=0 embedded_chunks=1",
+        "after rm   : added=0 updated=0 unchanged=1 removed=1 embedded_chunks=0",
+        "usage.md | Usage > Tips | Keep tools small.",
+    ],
     "native_providers.py": ["anthropic: The sum is 5.", "gemini: The sum is 5."],
     "multimodal.py": [
         "answer: I can see 1 image (image/png, larger than the inline limit: True).",

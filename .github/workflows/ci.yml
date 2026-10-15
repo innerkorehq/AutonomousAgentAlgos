@@ -151,9 +151,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv sync --frozen --extra qdrant
+      - run: uv sync --frozen --extra qdrant --extra pdf
       - name: Vector store tests
-        run: uv run pytest -v -p no:cacheprovider tests/unit/test_vector.py tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py
+        run: uv run pytest -v -p no:cacheprovider tests/unit/test_ingest.py tests/unit/test_vector.py tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py
       - name: Newest releases (scheduled and manual runs only)
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         run: |
@@ -179,12 +179,12 @@ jobs:
           uv pip install ${{ matrix.lib }}
           uv run --no-sync python -c "import ${{ matrix.lib == 'sqlite-vec' && 'sqlite_vec' || matrix.lib }}"
       - name: Vector store tests
-        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py -k "not pgvector and not postgres"
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py tests/unit/test_ingest.py -k "not pgvector and not postgres"
       - name: Newest release (scheduled and manual runs only)
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         run: |
           uv pip install --upgrade ${{ matrix.lib }}
-          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py -k "not pgvector and not postgres"
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py tests/unit/test_ingest.py -k "not pgvector and not postgres"
 
   pinecone-local:
     # The official Pinecone Local emulator (data plane), against the newest SDK and the previous major. Not a live Pinecone account.
@@ -210,7 +210,7 @@ jobs:
       - name: Install the SDK
         run: uv pip install ${{ matrix.sdk }}
       - name: Pinecone tests
-        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_vector_hybrid.py -k "pinecone or Pinecone"
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py tests/unit/test_ingest.py -k "pinecone or Pinecone or each_real"
 
   guard-adapters-more:
     # Bedrock (botocore validates request and response against the service model), Guardrails AI and NeMo Guardrails (real flows).

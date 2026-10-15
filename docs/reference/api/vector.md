@@ -33,3 +33,5 @@
 ::: aaa.vector.pinecone.PineconeStore
 
 ::: aaa.vector.CohereReranker
+
+::: aaa.vector.VoyageReranker

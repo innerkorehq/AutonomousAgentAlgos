@@ -145,6 +145,12 @@ class TenantVectorStore:
     def higher_is_better(self) -> bool:
         return self.store.higher_is_better
 
+    def sibling(self, suffix: str) -> TenantVectorStore:
+        """The same tenant's view of a neighbouring namespace (`<namespace><suffix>`): another partition behind the same two walls."""
+        other = TenantVectorStore(self.store, self.tenant, namespace_prefix="")
+        other.namespace = f"{self.namespace}{suffix}"
+        return other
+
     def _ns(self, namespace: str | None) -> str:
         if namespace not in (None, self.namespace):
             raise VectorError(

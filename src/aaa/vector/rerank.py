@@ -134,3 +134,49 @@ class CohereReranker:
 
     async def aclose(self) -> None:
         await self._http.aclose()
+
+
+class VoyageReranker:
+    """Voyage AI's rerank endpoint (`POST https://api.voyageai.com/v1/rerank`; plain HTTP, no SDK). The passages leave your process.
+
+        RerankingIndex(index, VoyageReranker(api_key="...", model="rerank-2.5"), fetch_k=30)
+
+    Built from Voyage's published request/response description (`data[].index`, `data[].relevance_score`) and tested with a mock transport; not run against a live account.
+    (A Jina reranker is not included: Jina's documentation does not specify the response format.)"""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        model: str = "rerank-2.5",
+        base_url: str = "https://api.voyageai.com",
+        timeout_s: float = 20.0,
+        transport: Any = None,
+    ) -> None:
+        import os
+
+        import httpx
+
+        self.api_key = api_key or os.environ.get("VOYAGE_API_KEY")
+        self.model, self.base_url = model, base_url.rstrip("/")
+        self._http = httpx.AsyncClient(timeout=timeout_s, transport=transport)
+
+    async def rerank(self, query: str, hits: list[Hit], k: int) -> list[Hit]:
+        if len(hits) <= 1:
+            return hits[:k]
+        r = await self._http.post(
+            f"{self.base_url}/v1/rerank",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": self.model,
+                "query": query,
+                "documents": [h.doc.text for h in hits],
+                "top_k": k,
+            },
+        )
+        r.raise_for_status()
+        order = [x["index"] for x in r.json()["data"] if 0 <= x["index"] < len(hits)]
+        return [hits[i] for i in order[:k]]
+
+    async def aclose(self) -> None:
+        await self._http.aclose()

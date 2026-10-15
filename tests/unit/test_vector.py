@@ -218,3 +218,44 @@ async def test_cohere_reranker_request_and_order():
         "documents": [h.doc.text for h in hits],
         "top_n": 2,
     }
+
+
+async def test_voyage_reranker_request_and_order():
+    import httpx
+
+    from aaa.vector.rerank import VoyageReranker
+
+    seen = []
+
+    def handler(request):
+        seen.append(
+            (str(request.url), request.headers["authorization"], json.loads(request.content))
+        )
+        # the response example from Voyage's documentation, extended to three results
+        return httpx.Response(
+            200,
+            json={
+                "object": "list",
+                "data": [
+                    {"relevance_score": 0.9, "index": 2},
+                    {"relevance_score": 0.4, "index": 0},
+                ],
+                "model": "rerank-2.5",
+                "usage": {"total_tokens": 8},
+            },
+        )
+
+    idx = await seeded()
+    hits = await idx.search("cat food dog", k=3)
+    out = await VoyageReranker("vk", transport=httpx.MockTransport(handler)).rerank(
+        "cat food dog", hits, 2
+    )
+    assert [h.doc.id for h in out] == [hits[2].doc.id, hits[0].doc.id]
+    url, auth, body = seen[0]
+    assert url == "https://api.voyageai.com/v1/rerank" and auth == "Bearer vk"
+    assert body == {
+        "model": "rerank-2.5",
+        "query": "cat food dog",
+        "documents": [h.doc.text for h in hits],
+        "top_k": 2,
+    }

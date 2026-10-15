@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Ingestion** (see [the guide](../guides/ingestion.md))
+
+- `aaa.ingest`: `DirectoryLoader` / `FileLoader` / `PDFLoader` (extra `pdf`), `RecursiveChunker` (characters or tokens) and `MarkdownChunker`, and `Pipeline.sync()`: incremental (unchanged sources skipped, only changed chunks re-embedded, stale chunks and removed sources deleted), batched and retried embedding, a manifest kept in the store itself, per-tenant, resumable. Run against pgvector, sqlite-vec, Qdrant, LanceDB, Chroma and Pinecone Local in CI.
+- `VoyageReranker` (Voyage AI's rerank endpoint). A Jina reranker is not included: Jina's documentation does not specify its response format.
+
 **Hybrid search**
 
 - `HybridSearch.query_hybrid` is now implemented by `InMemoryVectorStore` (BM25), `PgVectorStore` (full-text `tsv` column, added automatically) and `SqliteVecStore` (FTS5 via triggers), fusing keyword relevance with similarity by reciprocal rank. `EmbeddingIndex(..., hybrid=True|"auto")` / `search(..., hybrid=)`; `Hit.metric == "rrf"`. New `HybridUnavailable`.
