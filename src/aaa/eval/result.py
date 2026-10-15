@@ -39,6 +39,9 @@ class CaseResult:
     error: str | None = None  # the harness failed to run the case (not: the agent failed)
     repeat: int = 0
     scores: list[Score] = field(default_factory=list)
+    turns: list[tuple[str, str]] = field(
+        default_factory=list
+    )  # (user, assistant) pairs of a multi-turn case
 
     @property
     def ok(self) -> bool:

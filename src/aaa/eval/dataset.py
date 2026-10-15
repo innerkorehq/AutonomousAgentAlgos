@@ -76,6 +76,14 @@ class Dataset:
             ]
         return cls.from_list(rows, p.stem)
 
+    @classmethod
+    async def from_traces(cls, engine: Any, **kw: Any) -> Dataset:
+        """Cases from finished production runs (scrubbed by default). See `aaa.eval.traces.dataset_from_traces`."""
+        from aaa.eval.traces import dataset_from_traces
+
+        ds = await dataset_from_traces(engine, **kw)
+        return cls(ds.cases, ds.name)
+
     def to_jsonl(self, path: str | Path) -> None:
         Path(path).write_text("".join(c.model_dump_json() + "\n" for c in self.cases))
 

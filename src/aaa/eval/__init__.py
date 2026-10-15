@@ -23,8 +23,10 @@ from aaa.eval.metrics import (
     ToolSequence,
 )
 from aaa.eval.online import OnlineEvaluator
+from aaa.eval.redteam import NoLeak, RedTeamReport, Resisted, attack_suite, evaluate_guard
 from aaa.eval.report import EvalReport, Regression
 from aaa.eval.result import CaseResult
+from aaa.eval.simulate import SessionEvalRunner, SimulatedUser
 from aaa.eval.suite import EvalSuite
 from aaa.score import Score
 
@@ -41,13 +43,20 @@ __all__ = [
     "JsonValid",
     "LLMJudge",
     "Metric",
+    "NoLeak",
     "NumericClose",
     "OnlineEvaluator",
     "OutcomeIs",
+    "RedTeamReport",
     "Regex",
     "Regression",
+    "Resisted",
     "Score",
     "SemanticSimilarity",
+    "SessionEvalRunner",
+    "SimulatedUser",
     "ToolCalled",
     "ToolSequence",
+    "attack_suite",
+    "evaluate_guard",
 ]

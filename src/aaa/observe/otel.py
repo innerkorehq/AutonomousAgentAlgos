@@ -25,11 +25,14 @@ import base64
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, ClassVar, Protocol
 
+import httpx
+
 from aaa.observe.base import ExportError
-from aaa.trace import A, Span
+from aaa.score import Score
+from aaa.trace import A, Span, span_id_of
 
 SEMCONV_VERSION = "opentelemetry-semantic-conventions 0.66b1 (gen_ai.* in Development)"
 
@@ -371,6 +374,29 @@ class OTelSink:
                     f"{type(self.exporter).__name__} reported a failure exporting {len(batch)} span(s)"
                 )
 
+    async def score(
+        self, trace_id: str, scores: Sequence[Score], *, span_id: str | None = None
+    ) -> None:
+        """Attach scores as `evaluate <name>` evaluator spans under `span_id` (the generic OpenTelemetry way: a backend that
+        understands evaluators shows them, one that does not still keeps them as spans). Ids are fixed per (trace, span, name)."""
+        now = datetime.now(UTC)
+        spans = []
+        for s in scores:
+            sp = Span(
+                trace_id=trace_id,
+                span_id=span_id_of("evalscore", f"{trace_id}:{span_id}:{s.name}"),
+                parent_id=span_id,
+                name=f"evaluate {s.name}",
+                kind="evaluator",
+                start=now,
+                end=now,
+                attributes={A.OPERATION: "evaluate", A.SCORE_NAME: s.name, A.SCORE_VALUE: s.value},
+            )
+            if s.reason:
+                sp.attributes["score.reason"] = s.reason
+            spans.append(sp)
+        await self.export(spans)
+
     async def aclose(self) -> None:
         shutdown = getattr(self.exporter, "shutdown", None)
         if shutdown is not None:
@@ -383,7 +409,23 @@ def _otlp(endpoint: str, headers: dict[str, str]) -> Any:
     return OTLPSpanExporter(endpoint=endpoint, headers=headers)
 
 
-class LangfuseSink(OTelSink):
+class _HttpScores:
+    """Shared plumbing for the sinks that deliver scores over the vendor's REST API."""
+
+    _http: httpx.AsyncClient | None = None
+    _own_http = False
+
+    def _client(self) -> httpx.AsyncClient:
+        if self._http is None:
+            self._http, self._own_http = httpx.AsyncClient(timeout=15.0, trust_env=False), True
+        return self._http
+
+    async def _close_http(self) -> None:
+        if self._http is not None and self._own_http:
+            await self._http.aclose()
+
+
+class LangfuseSink(_HttpScores, OTelSink):
     """Langfuse over OTLP/HTTP (`/api/public/otel`; Langfuse accepts HTTP only, not gRPC)."""
 
     def __init__(
@@ -394,17 +436,34 @@ class LangfuseSink(OTelSink):
         *,
         environment: str | None = None,
         tags: Sequence[str] = (),
+        http: httpx.AsyncClient | None = None,
         **kw: Any,
     ) -> None:
         auth = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
+        self._host, self._auth, self._environment = host, auth, environment
+        self._http = http
         exporter = _otlp(
             f"{host.rstrip('/')}/api/public/otel/v1/traces",
             {"Authorization": f"Basic {auth}", "x-langfuse-ingestion-version": "4"},
         )
         super().__init__(exporter, dialect=LangfuseDialect(environment, tags), **kw)
 
+    async def score(
+        self, trace_id: str, scores: Sequence[Score], *, span_id: str | None = None
+    ) -> None:
+        """Send scores to `POST /api/public/scores` (attached to the trace, or to the observation `span_id`). Idempotent."""
+        from aaa.observe.scoring import langfuse_score
 
-class LangSmithSink(OTelSink):
+        await langfuse_score(
+            self._client(), self._host, self._auth, trace_id, scores, span_id, self._environment
+        )
+
+    async def aclose(self) -> None:
+        await super().aclose()
+        await self._close_http()
+
+
+class LangSmithSink(_HttpScores, OTelSink):
     """LangSmith over OTLP/HTTP. Note LangSmith silently drops a span whose parent never arrives; the observer exports
     whole traces parents-first for this reason."""
 
@@ -415,8 +474,11 @@ class LangSmithSink(OTelSink):
         endpoint: str = "https://api.smith.langchain.com/otel",
         *,
         provider: str | None = None,
+        api_url: str = "https://api.smith.langchain.com",
+        http: httpx.AsyncClient | None = None,
         **kw: Any,
     ) -> None:
+        self._api_url, self._key, self._http = api_url, api_key, http
         headers = {"x-api-key": api_key, **({"Langsmith-Project": project} if project else {})}
         super().__init__(
             _otlp(f"{endpoint.rstrip('/')}/v1/traces", headers),
@@ -424,8 +486,23 @@ class LangSmithSink(OTelSink):
             **kw,
         )
 
+    async def score(
+        self, trace_id: str, scores: Sequence[Score], *, span_id: str | None = None
+    ) -> None:
+        """Send scores as LangSmith feedback on the run that `span_id` became (`span_id` is required: LangSmith run ids come
+        from span ids, not trace ids; an `OnlineEvaluator` passes it)."""
+        from aaa.observe.scoring import langsmith_score
 
-class PhoenixSink(OTelSink):
+        await langsmith_score(
+            self._client(), self._api_url, {"x-api-key": self._key}, scores, span_id
+        )
+
+    async def aclose(self) -> None:
+        await super().aclose()
+        await self._close_http()
+
+
+class PhoenixSink(_HttpScores, OTelSink):
     """Arize Phoenix over OTLP/HTTP, using OpenInference attributes."""
 
     def __init__(
@@ -433,9 +510,25 @@ class PhoenixSink(OTelSink):
         endpoint: str = "http://localhost:6006/v1/traces",
         project: str | None = None,
         api_key: str | None = None,
+        http: httpx.AsyncClient | None = None,
         **kw: Any,
     ) -> None:
         headers = {"authorization": f"Bearer {api_key}"} if api_key else {}
+        self._base = endpoint.removesuffix("/").removesuffix("/v1/traces")
+        self._headers, self._http = dict(headers), http
         res = {"openinference.project.name": project} if project else {}
         kw.setdefault("resource_attributes", {}).update(res)
         super().__init__(_otlp(endpoint, headers), dialect=OpenInferenceDialect(), **kw)
+
+    async def score(
+        self, trace_id: str, scores: Sequence[Score], *, span_id: str | None = None
+    ) -> None:
+        """Send scores as Phoenix annotations (on the span `span_id`, else on the trace). Repeats update in place; if the span
+        has not been ingested yet the call is retried briefly."""
+        from aaa.observe.scoring import phoenix_score
+
+        await phoenix_score(self._client(), self._base, self._headers, trace_id, scores, span_id)
+
+    async def aclose(self) -> None:
+        await super().aclose()
+        await self._close_http()

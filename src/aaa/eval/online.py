@@ -25,7 +25,7 @@ from aaa.events import Event
 from aaa.runtime import Engine
 from aaa.safe import SafeWorker, safe_subscribe
 from aaa.score import Score
-from aaa.trace import trace_id_of
+from aaa.trace import span_id_of, trace_id_of
 
 log = logging.getLogger("aaa.eval")
 
@@ -122,7 +122,7 @@ class OnlineEvaluator:
         for sink in self.sinks:
             if hasattr(sink, "score"):
                 try:
-                    await sink.score(trace_id, res.scores)
+                    await sink.score(trace_id, res.scores, span_id=span_id_of("run", run_id))
                 except Exception:
                     log.warning("score sink %s failed", type(sink).__name__, exc_info=True)
 
