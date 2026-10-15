@@ -181,3 +181,40 @@ async def test_in_memory_metrics(metric, better):
         assert ms[0].score == pytest.approx(2.0)
     if metric == "cosine":
         assert ms[0].score == pytest.approx(1.0) and math.isclose(ms[1].score, -1.0)
+
+
+async def test_cohere_reranker_request_and_order():
+    import httpx
+
+    from aaa.vector.rerank import CohereReranker
+
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append((str(request.url), request.headers["authorization"], body))
+        return httpx.Response(
+            200,
+            json={
+                "id": "x",
+                "results": [
+                    {"index": 2, "relevance_score": 0.9},
+                    {"index": 0, "relevance_score": 0.4},
+                ],
+                "meta": {},
+            },
+        )
+
+    idx = await seeded()
+    hits = await idx.search("cat food dog", k=3)
+    rr = CohereReranker("co-key", transport=httpx.MockTransport(handler))
+    out = await rr.rerank("cat food dog", hits, 2)
+    assert [h.doc.id for h in out] == [hits[2].doc.id, hits[0].doc.id]
+    url, auth, body = seen[0]
+    assert url == "https://api.cohere.com/v2/rerank" and auth == "Bearer co-key"
+    assert body == {
+        "model": "rerank-v4.0-pro",
+        "query": "cat food dog",
+        "documents": [h.doc.text for h in hits],
+        "top_n": 2,
+    }

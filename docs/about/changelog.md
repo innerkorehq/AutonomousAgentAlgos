@@ -6,6 +6,10 @@
 
 - `aaa.observe.Observer`: derives traces from the event log (`aaa.trace.spans_from_events`) and exports them whole, parents first, once per cluster, without ever failing a run. Sinks: `InMemorySink`, `ConsoleSink`, `CallableSink`, `OTelSink` and presets `LangfuseSink`, `LangSmithSink`, `PhoenixSink` (extras `otel`, `langfuse`, `langsmith`, `phoenix`). Content capture is opt-in; sampling, tenant filter, incremental export of open sessions, `backfill`.
 
+**More guard adapters**
+
+- `BedrockGuard` (`ApplyGuardrail`), `AzurePromptShieldGuard`, `LakeraGuard`, `GuardrailsAIGuard` and `NeMoGuard`, with the same stage and action semantics as the built-in guards. Extra `bedrock`.
+
 **More vector stores**
 
 - `SqliteVecStore` (one file, exact, filters in SQL), `LanceDBStore` (embedded; exact filters evaluated client-side in growing batches) and `ChromaStore` (embedded or server; refuses what Chroma cannot express), `PineconeStore` (own namespaces, waits for eventual consistency), all through the same contract suite. Extras `sqlitevec`, `lancedb`, `chroma`, `pinecone`.

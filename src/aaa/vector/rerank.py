@@ -89,3 +89,48 @@ class RerankingIndex:
     ) -> list[Hit]:
         hits = await self.index.search(query, max(self.fetch_k, k), filter=filter)  # type: ignore[call-arg]
         return await self.reranker.rerank(query, hits, k)
+
+
+class CohereReranker:
+    """Cohere's rerank endpoint (`POST https://api.cohere.com/v2/rerank`; plain HTTP, no SDK). The passages leave your process.
+
+        RerankingIndex(index, CohereReranker(api_key="...", model="rerank-v4.0-pro"), fetch_k=30)
+
+    Built from Cohere's published request/response description and tested with a mock transport; not run against a live account."""
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        model: str = "rerank-v4.0-pro",
+        base_url: str = "https://api.cohere.com",
+        timeout_s: float = 20.0,
+        transport: Any = None,
+    ) -> None:
+        import os
+
+        import httpx
+
+        self.api_key = api_key or os.environ.get("COHERE_API_KEY")
+        self.model, self.base_url = model, base_url.rstrip("/")
+        self._http = httpx.AsyncClient(timeout=timeout_s, transport=transport)
+
+    async def rerank(self, query: str, hits: list[Hit], k: int) -> list[Hit]:
+        if len(hits) <= 1:
+            return hits[:k]
+        r = await self._http.post(
+            f"{self.base_url}/v2/rerank",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": self.model,
+                "query": query,
+                "documents": [h.doc.text for h in hits],
+                "top_n": k,
+            },
+        )
+        r.raise_for_status()
+        order = [x["index"] for x in r.json()["results"] if 0 <= x["index"] < len(hits)]
+        return [hits[i] for i in order[:k]]
+
+    async def aclose(self) -> None:
+        await self._http.aclose()

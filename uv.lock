@@ -371,6 +371,9 @@ autoevals = [
     { name = "autoevals" },
     { name = "openai" },
 ]
+bedrock = [
+    { name = "boto3" },
+]
 chroma = [
     { name = "chromadb" },
 ]
@@ -459,6 +462,7 @@ requires-dist = [
     { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'langfuse'" },
     { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'langsmith'" },
     { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'phoenix'" },
+    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.35" },
     { name = "chromadb", marker = "extra == 'chroma'", specifier = ">=1.0" },
     { name = "graphiti-core", marker = "extra == 'graphiti'", specifier = ">=0.30" },
     { name = "httpx", specifier = ">=0.27" },
@@ -476,14 +480,14 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.30" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.30" },
     { name = "opentelemetry-semantic-conventions", marker = "extra == 'otel'", specifier = ">=0.50b0" },
-    { name = "pinecone", extras = ["asyncio"], marker = "extra == 'pinecone'", specifier = ">=7" },
+    { name = "pinecone", marker = "extra == 'pinecone'", specifier = ">=7" },
     { name = "pyarrow", marker = "extra == 'lancedb'" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.9" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
     { name = "sqlite-vec", marker = "extra == 'sqlitevec'", specifier = ">=0.1.6" },
 ]
-provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgraph", "langmem", "otel", "langfuse", "langsmith", "phoenix", "autoevals", "pgvector", "qdrant", "sqlitevec", "lancedb", "chroma", "pinecone", "mcp", "docs"]
+provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgraph", "langmem", "otel", "langfuse", "langsmith", "phoenix", "autoevals", "pgvector", "qdrant", "sqlitevec", "lancedb", "chroma", "pinecone", "bedrock", "mcp", "docs"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -33,3 +33,13 @@
 ::: aaa.guard.presidio.PresidioGuard
 
 ::: aaa.guard.presidio.PresidioRedactor
+
+::: aaa.guard.bedrock.BedrockGuard
+
+::: aaa.guard.azure.AzurePromptShieldGuard
+
+::: aaa.guard.lakera.LakeraGuard
+
+::: aaa.guard.guardrails_ai.GuardrailsAIGuard
+
+::: aaa.guard.nemo.NeMoGuard

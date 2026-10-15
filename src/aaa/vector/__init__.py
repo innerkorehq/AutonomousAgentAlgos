@@ -24,7 +24,7 @@ from aaa.vector.filters import (
 )
 from aaa.vector.index import EmbeddingIndex, TenantVectorStore
 from aaa.vector.memory import InMemoryVectorStore
-from aaa.vector.rerank import LLMReranker, Reranker, RerankingIndex
+from aaa.vector.rerank import CohereReranker, LLMReranker, Reranker, RerankingIndex
 from aaa.vector.types import (
     DeleteWhere,
     DimensionMismatch,
@@ -39,6 +39,7 @@ from aaa.vector.types import (
 
 __all__ = [
     "And",
+    "CohereReranker",
     "DeleteWhere",
     "DimensionMismatch",
     "DropNamespace",

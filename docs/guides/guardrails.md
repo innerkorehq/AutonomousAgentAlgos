@@ -80,10 +80,22 @@ Every check appends an `aaa.guard.verdict` event: guard, version, stage, action,
 |---|---|---|
 | OpenAI Moderation | `aaa.guard.openai_moderation.OpenAIModerationGuard(api_key, thresholds=)` | none (plain HTTP) |
 | Microsoft Presidio | `aaa.guard.presidio.PresidioGuard(entities=, action=)` and `PresidioRedactor` (an event redactor for `Engine(redactor=)`) | `pip install presidio-analyzer presidio-anonymizer` and `python -m spacy download en_core_web_sm` |
+| AWS Bedrock Guardrails | `aaa.guard.bedrock.BedrockGuard(guardrail_id, version)`: `ApplyGuardrail` checks text without calling any model | `pip install "autonomous-agent-algos[bedrock]"` |
+| Azure Prompt Shields | `aaa.guard.azure.AzurePromptShieldGuard(endpoint, api_key)`: jailbreaks in user input, injected instructions in tool results | none (plain HTTP) |
+| Lakera Guard | `aaa.guard.lakera.LakeraGuard(api_key, project_id=)` | none (plain HTTP) |
+| Guardrails AI | `aaa.guard.guardrails_ai.GuardrailsAIGuard(guard)`: any `Guard` / `AsyncGuard` and its validators | `pip install guardrails-ai` |
+| NVIDIA NeMo Guardrails | `aaa.guard.nemo.NeMoGuard(rails)`: your configured input and output rails | `pip install nemoguardrails` |
 
-Hosted guards send the text to the provider: only use them where that is acceptable. Presidio runs locally; it needs a spaCy model for names and
-places, and detection is probabilistic. Guardrails AI, NeMo Guardrails, AWS Bedrock `ApplyGuardrail`, Lakera and Azure Prompt Shields are planned; until
-then `CallableGuard` wraps any of them.
+Hosted guards (OpenAI, Bedrock, Azure, Lakera) send the text to the provider: only use them where that is acceptable. Presidio, Guardrails AI and NeMo run in your process.
+
+- **Bedrock** treats `GUARDRAIL_INTERVENED` as a block, unless every policy that fired only masked PII and Bedrock returned replacement text, which becomes a redaction. Stage to `source`: input and tool results are `INPUT`; model output and tool-call arguments are `OUTPUT`.
+- **Azure Prompt Shields** sends user input as `userPrompt` and tool results as `documents`, which is the "document attack" case it exists for.
+- **Lakera** maps stages to message roles (`user`, `assistant`, `tool`; tool messages are screened as untrusted). In Lakera's *Detect* mode `flagged` is always false, so the guard never blocks: use the project's enforce mode.
+- **Guardrails AI**: a failed validation blocks, a validator with `on_fail="fix"` becomes a redaction, `on_fail="exception"` is caught. Give validators `on_fail="noop"` or `"fix"` and let AAA decide. The library sends telemetry over OTLP unless `OTEL_SDK_DISABLED=true`.
+- **NeMo** exposes only input and output rails (via `check_async`); input rails also screen tool results. Output rails that read the user's message see a placeholder, because a guard only receives the text being checked.
+- **Anything else**: `CallableGuard` wraps any function.
+
+**What was verified.** Presidio, Guardrails AI (0.11, custom validator, async and sync) and NeMo (0.24, a configuration whose rail is a Python action) run their real flows in CI; Bedrock's request and response are validated by botocore's own service model; the OpenAI Moderation reply is validated against the OpenAI SDK's types. Azure Prompt Shields and Lakera are built from the vendors' published request/response descriptions and tested with mock transports (Lakera's per-detector field names were not confirmed, so they are read defensively). **No hosted service was called live.**
 
 ## Limits you should know
 

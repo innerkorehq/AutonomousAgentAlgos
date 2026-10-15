@@ -193,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sdk: ["pinecone[asyncio]", "pinecone[asyncio]<8"]
+        sdk: ["pinecone", "pinecone[asyncio]<8"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -211,6 +211,39 @@ jobs:
         run: uv pip install "${{ matrix.sdk }}"
       - name: Pinecone tests
         run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py -k "pinecone or Pinecone"
+
+  guard-adapters-more:
+    # Bedrock (botocore validates request and response against the service model), Guardrails AI and NeMo Guardrails (real flows).
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lib: boto3
+            packages: "boto3"
+            keyword: Bedrock
+          - lib: guardrails-ai
+            packages: "guardrails-ai"
+            keyword: GuardrailsAI
+          - lib: nemoguardrails
+            packages: "nemoguardrails"
+            keyword: NeMo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Install ${{ matrix.lib }}
+        run: uv pip install ${{ matrix.packages }}
+      - name: Adapter tests
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard_adapters.py -k ${{ matrix.keyword }}
+      - name: Newest release (scheduled and manual runs only)
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        run: |
+          uv pip install --upgrade ${{ matrix.packages }}
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard_adapters.py -k ${{ matrix.keyword }}
 
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL

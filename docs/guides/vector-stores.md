@@ -81,7 +81,7 @@ another tenant, raises. `acme.erase()` removes everything of that tenant (tenant
 
 ## Reranking
 
-`RerankingIndex(index, LLMReranker(client), fetch_k=30)` fetches generously and lets a model reorder the best `k`; an unreadable reply keeps the original order.
+`RerankingIndex(index, LLMReranker(client), fetch_k=30)` fetches generously and lets a model reorder the best `k`; an unreadable reply keeps the original order. `CohereReranker(api_key)` calls Cohere's rerank endpoint instead (plain HTTP; built from Cohere's published request/response, mock-tested, not run live). Voyage and Jina rerankers are not included: their response formats could not be confirmed from the documentation.
 
 ## Things to know
 
