@@ -186,6 +186,32 @@ jobs:
           uv pip install --upgrade ${{ matrix.lib }}
           uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py -k "not pgvector and not postgres"
 
+  pinecone-local:
+    # The official Pinecone Local emulator (data plane), against the newest SDK and the previous major. Not a live Pinecone account.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: ["pinecone[asyncio]", "pinecone[asyncio]<8"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Start Pinecone Local and create an index
+        run: |
+          docker run -d --name pinecone-local -e PORT=5080 -e PINECONE_HOST=localhost -p 5080-5090:5080-5090 --platform linux/amd64 ghcr.io/pinecone-io/pinecone-local:latest
+          for i in $(seq 1 30); do curl -sf localhost:5080/indexes && break; sleep 2; done
+          host=$(curl -s -X POST localhost:5080/indexes -H 'Content-Type: application/json' -H 'Api-Key: pclocal' -H 'X-Pinecone-API-Version: 2025-04' \
+            -d '{"name":"contract","dimension":4,"metric":"cosine","spec":{"serverless":{"cloud":"aws","region":"us-east-1"}}}' | python3 -c "import sys,json; print(json.load(sys.stdin)['host'])")
+          echo "AAA_TEST_PINECONE_HOST=http://$host" >> "$GITHUB_ENV"
+      - name: Install the SDK
+        run: uv pip install "${{ matrix.sdk }}"
+      - name: Pinecone tests
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py -k "pinecone or Pinecone"
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

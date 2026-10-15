@@ -8,7 +8,7 @@
 
 **More vector stores**
 
-- `SqliteVecStore` (one file, exact, filters in SQL), `LanceDBStore` (embedded; exact filters evaluated client-side in growing batches) and `ChromaStore` (embedded or server; refuses what Chroma cannot express), all through the same contract suite. Extras `sqlitevec`, `lancedb`, `chroma`.
+- `SqliteVecStore` (one file, exact, filters in SQL), `LanceDBStore` (embedded; exact filters evaluated client-side in growing batches) and `ChromaStore` (embedded or server; refuses what Chroma cannot express), `PineconeStore` (own namespaces, waits for eventual consistency), all through the same contract suite. Extras `sqlitevec`, `lancedb`, `chroma`, `pinecone`.
 
 **Vector stores** (see [the guide](../guides/vector-stores.md))
 

@@ -40,6 +40,7 @@ FEATURES: dict[str, set[str]] = {
     "qdrant": {"string-range", "raw-vectors"},
     "sqlitevec": set(),
     "lancedb": set(),
+    "pinecone": {"string-range", "null-values"},
     "chroma": {"string-range", "null-values", "exists"},
 }
 
@@ -49,7 +50,9 @@ def need(request_param: str, feature: str) -> None:
         pytest.skip(f"{request_param} does not provide {feature}")
 
 
-@pytest.fixture(params=["memory", "pgvector", "qdrant", "sqlitevec", "chroma", "lancedb"])
+@pytest.fixture(
+    params=["memory", "pgvector", "qdrant", "sqlitevec", "chroma", "lancedb", "pinecone"]
+)
 def backend(request):
     """Sync fixture: the session-scoped Postgres admin DSN can be requested dynamically from here, but not from an async fixture."""
     return request.param, (
@@ -62,6 +65,28 @@ async def store(backend):
     name, admin_dsn = backend
     if name == "memory":
         yield InMemoryVectorStore(DIM, "cosine")
+        return
+    if name == "pinecone":
+        pytest.importorskip("pinecone")
+        import os
+        import uuid as _uuid
+
+        host = os.environ.get(
+            "AAA_TEST_PINECONE_HOST"
+        )  # a Pinecone Local index host, e.g. http://localhost:5081
+        if not host:
+            pytest.skip(
+                "set AAA_TEST_PINECONE_HOST to a Pinecone Local index (docker run ghcr.io/pinecone-io/pinecone-local)"
+            )
+        from aaa.vector.pinecone import PineconeStore
+
+        st = PineconeStore(api_key="pclocal", index_host=host, dimension=DIM)
+        prefix = (
+            "t" + _uuid.uuid4().hex[:8] + "-"
+        )  # the local index is shared: isolate this test's namespaces
+        st._ns = lambda n: prefix + (n or "default")  # type: ignore[method-assign]
+        yield st
+        await st.aclose()
         return
     if name == "lancedb":
         pytest.importorskip("lancedb")

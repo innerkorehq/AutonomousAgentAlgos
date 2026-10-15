@@ -26,9 +26,10 @@ acme sees: ['acme invoice terms']
 | `QdrantStore(url=… \| location=":memory:", dimension=)` | `pip install "autonomous-agent-algos[qdrant]"` | server, cloud, or in-process |
 | `SqliteVecStore("vectors.db", dimension=)` | `[sqlitevec]` | one file; brute force and exact; every filter runs in SQL before the top-k cut; needs a Python whose `sqlite3` can load extensions |
 | `LanceDBStore("./lance", dimension=)` | `[lancedb]` | embedded directory or object storage; metadata filters are exact but evaluated client-side over growing candidate batches (see below) |
+| `PineconeStore(index_name=… \| index_host=…, dimension=)` | `[pinecone]` | Pinecone's own namespaces; metadata flat with a 40 KB limit; writes wait for visibility (`consistent=True`); no `delete_where` (serverless cannot) |
 | `ChromaStore(path=… \| host=…, dimension=)` | `[chroma]` | embedded or server; one collection per namespace; flat metadata (nested objects flattened for filtering, exact original kept) |
 
-Planned: Pinecone. Anything else can implement `VectorStore` (about six methods).
+Anything else can implement `VectorStore` (about six methods).
 
 ```python
 from aaa.vector import EmbeddingIndex
@@ -59,6 +60,7 @@ Refused with `UnsupportedFilter` (never approximated):
 |---|---|
 | Qdrant | ranges over strings |
 | Chroma | ranges over strings, equality with `null`, `exists`, negated ranges |
+| Pinecone | ranges over strings, equality with `null`, negated ranges; also no delete-by-filter |
 | LanceDB | nothing is refused, but non-namespace filters are not pushed down: a very selective filter on a large namespace scans a lot. Choose pgvector or Qdrant if you need that at scale |
 | pgvector, sqlite-vec, in-memory | everything in the filter language |
 
@@ -88,5 +90,5 @@ another tenant, raises. `acme.erase()` removes everything of that tenant (tenant
 - **pgvector at scale.** One HNSW index serves the table, and namespace/filter conditions apply to its candidates, so a very selective filter on a huge table can return fewer than `k` rows
   unless you raise `ef_search`; for hard partitions at scale use a table per tenant (`table=`) or partition the table yourself. Table names are validated and quoted; values are always parameters.
 - **Qdrant** keeps every namespace in one collection (an indexed payload field), which is Qdrant's recommended multi-tenant layout; the in-process mode ignores payload indexes.
-- **Verified.** pgvector runs the shared contract suite against a real PostgreSQL with the extension, Qdrant against its real client in `:memory:` mode (not a server), and sqlite-vec, LanceDB and Chroma against the real libraries (sqlite-vec 0.1.9, LanceDB 0.40, Chroma 1.5): filters, namespaces, tenant escape
+- **Verified.** pgvector runs the shared contract suite against a real PostgreSQL with the extension, Qdrant against its real client in `:memory:` mode (not a server), sqlite-vec, LanceDB and Chroma against the real libraries (sqlite-vec 0.1.9, LanceDB 0.40, Chroma 1.5), and Pinecone against **Pinecone Local**, the official emulator, with both SDK 10 and SDK 7 (not a live Pinecone account; SDK 10's index-creation call is rejected by the emulator, so the tests create the index directly): filters, namespaces, tenant escape
   attempts, dimension checks, hostile values. Not run: Qdrant server/cloud, very large indexes, concurrent writers.

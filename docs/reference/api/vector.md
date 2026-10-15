@@ -29,3 +29,5 @@
 ::: aaa.vector.lancedb.LanceDBStore
 
 ::: aaa.vector.chroma.ChromaStore
+
+::: aaa.vector.pinecone.PineconeStore

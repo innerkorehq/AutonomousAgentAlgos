@@ -314,3 +314,89 @@ class TestChromaRefusals:
 
         w = to_where(Not(Or((F("a") == 1, F("b").is_in(["x", "y"])))))
         assert w == {"$and": [{"a": {"$ne": 1}}, {"b": {"$nin": ["x", "y"]}}]}
+
+
+class TestPinecone:
+    @pytest.fixture(autouse=True)
+    def _need(self):
+        pytest.importorskip("pinecone")
+
+    async def test_filters_pinecone_cannot_express_fail_before_any_io(self):
+        from aaa.vector import Not
+        from aaa.vector.pinecone import PineconeStore
+
+        class Exploding:
+            def __getattr__(self, name):
+                raise AssertionError(f"touched the client ({name})")
+
+        st = PineconeStore(index_host="x", dimension=DIM, client=Exploding())
+        st._ix = Exploding()
+        for bad in (F("name") >= "m", F("x") == None, Not(F("n") > 3)):
+            with pytest.raises(UnsupportedFilter):
+                await st.query([1.0, 0.0, 0.0], 3, filter=bad)
+
+    async def test_oversized_records_are_rejected_before_the_network(self):
+        from aaa.vector import VectorError
+        from aaa.vector.pinecone import PineconeStore
+
+        st = PineconeStore(index_host="x", dimension=DIM, client=object())
+        with pytest.raises(VectorError, match="40 KB"):
+            await st.upsert([Record("big", [1.0, 0.0, 0.0], "x" * 50_000)])
+
+    def test_filter_compilation(self):
+        from aaa.vector import Exists, Not, Or
+        from aaa.vector.pinecone import to_filter
+
+        assert to_filter(F("a") == 1) == {"a": 1}
+        assert to_filter(F("a") != 1) == {"a": {"$ne": 1}}
+        assert to_filter(Not(Exists("a"))) == {"a": {"$exists": False}}
+        assert to_filter(F("t").is_in(["x", "y"])) == {"t": {"$in": ["x", "y"]}}
+        assert to_filter(F("t").is_in(["x", 1])) == {
+            "$or": [{"t": "x"}, {"t": 1}]
+        }  # Pinecone rejects mixed-type $in
+        assert to_filter(Not(Or((F("a") == 1, F("b") == 2)))) == {
+            "$and": [{"a": {"$ne": 1}}, {"b": {"$ne": 2}}]
+        }
+        assert to_filter(F("n").is_in([])) == {"_aaa_never": {"$exists": True}}
+
+    async def test_consistency_wait_polls_until_visible(self):
+        from aaa.vector.pinecone import PineconeStore
+
+        class Fetch:
+            def __init__(self):
+                self.calls = 0
+
+            async def fetch(self, *, ids, namespace):
+                self.calls += 1
+
+                class R:
+                    vectors = {i: object() for i in ids} if self.calls >= 3 else {}
+
+                R.vectors = {i: object() for i in ids} if self.calls >= 3 else {}
+                return R
+
+            async def upsert(self, **kw):
+                return None
+
+        fake = Fetch()
+        st = PineconeStore(index_host="x", dimension=DIM, client=object(), consistency_timeout_s=5)
+        st._ix = fake
+        await st.upsert([Record("a", [1.0, 0.0, 0.0])])
+        assert fake.calls == 3  # not visible on the first two reads
+
+        st2 = PineconeStore(
+            index_host="x", dimension=DIM, client=object(), consistency_timeout_s=0.2
+        )
+        never = Fetch()
+        never.calls = -10_000
+        st2._ix = never
+        from aaa.vector import VectorError
+
+        with pytest.raises(VectorError, match="eventual consistency"):
+            await st2.upsert([Record("a", [1.0, 0.0, 0.0])])
+
+    def test_needs_an_index_name_or_host(self):
+        from aaa.vector.pinecone import PineconeStore
+
+        with pytest.raises(ValueError, match="index_name"):
+            PineconeStore(dimension=DIM)

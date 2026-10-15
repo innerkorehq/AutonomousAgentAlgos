@@ -21,8 +21,10 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
+from aaa.vector._flat import flatten
+from aaa.vector._flat import to_where as _to_where
 from aaa.vector._sync import SyncRunner
-from aaa.vector.filters import And, Eq, Exists, Filter, In, Ne, Not, Or, Range, UnsupportedFilter
+from aaa.vector.filters import Filter
 from aaa.vector.types import DEFAULT_NAMESPACE, Match, Metric, Record, check_vector
 
 META_KEY = "_aaa_meta"
@@ -30,77 +32,9 @@ TEXT_KEY = "_aaa_text"
 NEVER = {"_aaa_never": True}  # matches nothing: no record has this key
 
 
-def flatten(meta: dict[str, Any]) -> dict[str, Any]:
-    """Scalar leaves of the metadata under dotted keys (what Chroma can filter on)."""
-    out: dict[str, Any] = {}
-
-    def walk(prefix: str, v: Any) -> None:
-        if isinstance(v, dict):
-            for k, x in v.items():
-                walk(f"{prefix}.{k}" if prefix else str(k), x)
-        elif isinstance(v, str | int | float | bool):
-            out[prefix] = v
-
-    walk("", meta)
-    return out
-
-
-def _num(v: Any) -> bool:
-    return isinstance(v, int | float) and not isinstance(v, bool)
-
-
-def to_where(f: Filter, negate: bool = False) -> dict[str, Any] | None:
-    """Compile to a Chroma `where`; None means 'no condition'. Negation is pushed to the leaves (De Morgan)."""
-    if isinstance(f, Not):
-        return to_where(f.item, not negate)
-    if isinstance(f, Eq):
-        if f.value is None:
-            raise UnsupportedFilter("Chroma cannot store null, so it cannot filter for it")
-        return {f.field: {"$ne": f.value}} if negate else {f.field: f.value}
-    if isinstance(f, Ne):
-        return to_where(Eq(f.field, f.value), not negate)
-    if isinstance(f, In):
-        if not f.values:
-            return None if negate else NEVER
-        homogeneous = len({type(v) for v in f.values}) == 1
-        if homogeneous:
-            return {f.field: {"$nin" if negate else "$in": list(f.values)}}
-        return to_where(
-            And(tuple(Ne(f.field, v) for v in f.values))
-            if negate
-            else Or(tuple(Eq(f.field, v) for v in f.values))
-        )
-    if isinstance(f, Exists):
-        raise UnsupportedFilter("Chroma cannot test whether a metadata field exists")
-    if isinstance(f, Range):
-        if negate:
-            raise UnsupportedFilter(
-                "Chroma cannot negate a range (that would include records where the field is missing or not a number)"
-            )
-        ops = {"$gt": f.gt, "$gte": f.gte, "$lt": f.lt, "$lte": f.lte}
-        used = {k: v for k, v in ops.items() if v is not None}
-        if not all(_num(v) for v in used.values()):
-            raise UnsupportedFilter(
-                "Chroma ranges are numeric: a range over strings cannot be evaluated by the store"
-            )
-        conds = [{f.field: {k: v}} for k, v in used.items()]
-        return conds[0] if len(conds) == 1 else {"$and": conds}
-    if isinstance(f, And | Or):
-        is_and = isinstance(f, And) != negate  # De Morgan: not(and) = or(not)
-        parts = []
-        for item in f.items:
-            w = to_where(item, negate)
-            if w is None:
-                if is_and:
-                    continue  # 'no condition' inside an AND adds nothing
-                return None  # inside an OR it makes the whole OR unconditional
-            parts.append(w)
-        if not parts:
-            return None if is_and else NEVER
-        if len(parts) == 1:
-            return parts[0]
-        return {"$and" if is_and else "$or": parts}
-    raise UnsupportedFilter(f"Chroma adapter cannot express {type(f).__name__}")
+def to_where(f: Filter) -> dict[str, Any] | None:
+    """Compile to a Chroma `where` (None = no condition). Chroma cannot test existence."""
+    return _to_where(f, store="Chroma", supports_exists=False, never=NEVER)
 
 
 def _coll_name(prefix: str, namespace: str) -> str:

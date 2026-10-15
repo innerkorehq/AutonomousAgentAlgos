@@ -44,6 +44,7 @@ qdrant = ["qdrant-client>=1.9"]
 sqlitevec = ["sqlite-vec>=0.1.6"]
 lancedb = ["lancedb>=0.20", "pyarrow"]
 chroma = ["chromadb>=1.0"]
+pinecone = ["pinecone[asyncio]>=7"]
 mcp = ["mcp>=1.12,<3"]  # MCP client (aaa.mcp); works with both the 1.x and 2.x SDK
 docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 
