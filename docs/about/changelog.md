@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-15)
+
+Observability, evals, guardrails and persistent vector search, each with adapters for the common libraries and services. New optional extras: `otel`, `langfuse`, `langsmith`, `phoenix`, `autoevals`, `pgvector`, `qdrant`, `sqlitevec`, `lancedb`, `chroma`, `pinecone`, `bedrock`. Additive: new `OutcomeKind.BLOCKED`, `Hit.metric` / `Hit.higher_is_better`, `LLMHandler(guards=)` and `ToolHandler(guards=)`.
 
 **Observability** (see [the guide](../guides/observability.md))
 

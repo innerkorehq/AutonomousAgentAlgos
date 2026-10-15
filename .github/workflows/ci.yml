@@ -94,7 +94,7 @@ jobs:
             keyword: DeepEval
           - lib: ragas
             # ragas 0.4.x does not import against langchain 1.x (langchain_community.chat_models.vertexai, ContextOverflowError)
-            packages: "ragas langchain-community<0.4 langchain-core<1 langchain-openai<1"
+            packages: "ragas 'langchain-community<0.4' 'langchain-core<1' 'langchain-openai<1'"
             keyword: Ragas
           - lib: inspect-ai
             packages: "inspect-ai"
@@ -193,7 +193,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sdk: ["pinecone", "pinecone[asyncio]<8"]
+        sdk: ["pinecone", "'pinecone[asyncio]<8'"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -208,7 +208,7 @@ jobs:
             -d '{"name":"contract","dimension":4,"metric":"cosine","spec":{"serverless":{"cloud":"aws","region":"us-east-1"}}}' | python3 -c "import sys,json; print(json.load(sys.stdin)['host'])")
           echo "AAA_TEST_PINECONE_HOST=http://$host" >> "$GITHUB_ENV"
       - name: Install the SDK
-        run: uv pip install "${{ matrix.sdk }}"
+        run: uv pip install ${{ matrix.sdk }}
       - name: Pinecone tests
         run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_vector_contract.py tests/unit/test_vector_backends.py -k "pinecone or Pinecone"
 
