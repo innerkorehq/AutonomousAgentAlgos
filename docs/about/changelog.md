@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+**Observability** (see [the guide](../guides/observability.md))
+
+- `aaa.observe.Observer`: derives traces from the event log (`aaa.trace.spans_from_events`) and exports them whole, parents first, once per cluster, without ever failing a run. Sinks: `InMemorySink`, `ConsoleSink`, `CallableSink`, `OTelSink` and presets `LangfuseSink`, `LangSmithSink`, `PhoenixSink` (extras `otel`, `langfuse`, `langsmith`, `phoenix`). Content capture is opt-in; sampling, tenant filter, incremental export of open sessions, `backfill`.
+- Foundations: `aaa.score.Score`, `aaa.safe.safe_subscribe` (isolated, bounded observer workers).
+
 ## 0.1.1 (2026-10-15)
 
 **Chat sessions and provider-side state** (see [the guide](../guides/sessions.md))

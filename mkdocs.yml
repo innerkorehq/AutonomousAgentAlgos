@@ -99,6 +99,7 @@ nav:
       - Chat sessions and provider state: guides/sessions.md
       - Context management: guides/context.md
       - Long-term memory: guides/memory.md
+      - Observability and tracing: guides/observability.md
       - Tenancy, redaction, retention: guides/privacy.md
       - Testing your agents: guides/testing.md
       - Extending AAA: guides/extending.md
@@ -122,6 +123,7 @@ nav:
           - Context: reference/api/context.md
           - MCP: reference/api/mcp.md
           - Memory: reference/api/memory.md
+          - Observability: reference/api/observe.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:

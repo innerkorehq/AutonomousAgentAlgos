@@ -29,6 +29,11 @@ mem0 = ["mem0ai>=2.0"]
 graphiti = ["graphiti-core>=0.30"]
 langgraph = ["langgraph>=1.0"]
 langmem = ["langgraph>=1.0", "langmem>=0.0.30"]
+# Observability (aaa.observe): OTLP/HTTP covers Langfuse, LangSmith and Phoenix; the sinks are presets over it.
+otel = ["opentelemetry-sdk>=1.30", "opentelemetry-exporter-otlp-proto-http>=1.30", "opentelemetry-semantic-conventions>=0.50b0"]
+langfuse = ["autonomous-agent-algos[otel]"]
+langsmith = ["autonomous-agent-algos[otel]"]
+phoenix = ["autonomous-agent-algos[otel]"]
 mcp = ["mcp>=1.12,<3"]  # MCP client (aaa.mcp); works with both the 1.x and 2.x SDK
 docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 

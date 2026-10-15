@@ -107,6 +107,12 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "observability.py": [
+        "invoke_agent tool_loop",
+        "execute_tool lookup",
+        "spans exported: 4 in 1 batch",
+        "kinds: ['agent', 'llm', 'tool', 'llm']",
+    ],
 }
 COMPILE_ONLY = {"cluster_worker.py", "cluster_client.py"}
 OPTIONAL_DEPS = {"mcp_tools.py": "mcp"}  # skipped where the optional package is not installed

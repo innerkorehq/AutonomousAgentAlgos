@@ -90,8 +90,8 @@ jobs:
           enable-cache: true
       - name: Locked versions
         run: |
-          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem --extra mcp
-          uv run pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_examples.py -k "not cluster"
+          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem --extra mcp --extra otel
+          uv run pytest -v -p no:cacheprovider tests/unit/test_otel.py tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_examples.py -k "not cluster"
       - name: OpenAI SDK types (conformance of the Responses client; not a runtime dependency)
         run: |
           uv pip install openai
@@ -103,5 +103,5 @@ jobs:
       - name: Newest releases (scheduled and manual runs only)
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         run: |
-          uv pip install --upgrade mem0ai graphiti-core langgraph langmem mcp openai
-          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_memory_signatures.py tests/unit/test_mcp.py tests/unit/test_openai_conformance.py
+          uv pip install --upgrade mem0ai graphiti-core langgraph langmem mcp openai opentelemetry-sdk opentelemetry-exporter-otlp-proto-http opentelemetry-semantic-conventions
+          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_otel.py tests/unit/test_memory_signatures.py tests/unit/test_mcp.py tests/unit/test_openai_conformance.py
