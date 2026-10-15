@@ -2,6 +2,7 @@
 
 from aaa.context.policy import ContextPolicy, Prepared, SummaryBook
 from aaa.context.strategies import (
+    ClearMedia,
     ClearToolResults,
     DropOldest,
     Strategy,
@@ -14,6 +15,7 @@ from aaa.context.tokens import CalibratedCounter, HeuristicCounter, TiktokenCoun
 
 __all__ = [
     "CalibratedCounter",
+    "ClearMedia",
     "ClearToolResults",
     "ContextPolicy",
     "DropOldest",

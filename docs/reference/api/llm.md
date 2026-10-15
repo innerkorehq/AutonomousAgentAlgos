@@ -70,3 +70,11 @@
 ## Errors
 
 ::: aaa.llm.errors
+
+::: aaa.llm.parts.ImagePart
+
+::: aaa.llm.parts.AudioPart
+
+::: aaa.llm.parts.FilePart
+
+::: aaa.llm.errors.UnsupportedModality

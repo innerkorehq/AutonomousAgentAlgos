@@ -26,12 +26,13 @@ from aaa.llm.types import (
     ToolCallDelta,
     Usage,
 )
+from aaa.llm.wire_media import chat_content
 
 _OVERFLOW = ("context_length", "context length", "maximum context", "too many tokens", "too long")
 
 
 def _msg_out(m: Message) -> dict[str, Any]:
-    d: dict[str, Any] = {"role": m.role, "content": m.content}
+    d: dict[str, Any] = {"role": m.role, "content": chat_content(m)}
     if m.tool_calls:
         d["tool_calls"] = [
             {
@@ -87,6 +88,9 @@ class OpenAICompatClient:
 
     def __init__(self, config: LLMConfig, *, http_client: httpx.AsyncClient | None = None) -> None:
         self.config = config
+        self.modalities = frozenset(
+            config.modalities or ("text", "image")
+        )  # what the gateway's model accepts; set `modalities` in the config
         self._headers = {k: expand_env(v) for k, v in config.headers.items()}
         if config.api_key:
             self._headers.setdefault("authorization", f"Bearer {expand_env(config.api_key)}")

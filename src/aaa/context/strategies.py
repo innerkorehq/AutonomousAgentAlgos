@@ -23,6 +23,7 @@ from typing import Protocol, runtime_checkable
 
 from aaa.context.tokens import TokenCounter
 from aaa.llm.client import LLMClient
+from aaa.llm.parts import describe
 from aaa.llm.types import LLMRequest, Message, ToolSpec
 
 SUMMARY_PREFIX = "[Summary of the earlier conversation]\n"
@@ -189,6 +190,38 @@ class ClearToolResults:
         work.applied.append(self.name)
 
 
+class ClearMedia:
+    """Replace the attachments of old messages (all but the most recent `keep_last` messages that carry any) with a short text note.
+    Images and audio cost many tokens and are rarely needed again once the model has answered; the note keeps the conversation's shape."""
+
+    name = "clear_media"
+
+    def __init__(
+        self, keep_last: int = 1, note: str = "[{kind} attachment removed to save context]"
+    ) -> None:
+        self.keep_last, self.note = keep_last, note
+
+    async def apply(self, work: Work) -> None:
+        with_media = [i for i, m in enumerate(work.messages) if m.parts]
+        old = [
+            i
+            for i in with_media[: max(0, len(with_media) - self.keep_last)]
+            if i < _protected_from(work)
+        ]
+        if not old:
+            return
+        for i in old:
+            m = work.messages[i]
+            notes = " ".join(self.note.format(kind=p.type) for p in m.parts or [])
+            work.messages[i] = m.model_copy(
+                update={
+                    "parts": None,
+                    "content": f"{m.content}\n{notes}".strip() if m.content else notes,
+                }
+            )
+        work.applied.append(self.name)
+
+
 def _cut_for(work: Work, keep_tokens: int) -> int:
     """View index where the verbatim tail starts: the oldest group boundary such that the tail still fits in
     `keep_tokens`, but never fewer than `keep_recent` groups and never inside the head or the stored summary."""
@@ -261,7 +294,8 @@ def render_for_summary(msgs: Sequence[Message], *, tool_chars: int = 2_000) -> s
                 f"assistant: {(m.content or '').strip()} [called: {calls}]".replace(" []", "")
             )
         else:
-            lines.append(f"{m.role}: {m.content or ''}")
+            extra = " ".join(describe(p) for p in m.parts or [])
+            lines.append(f"{m.role}: {m.content or ''}" + (f" {extra}" if extra else ""))
     return "\n".join(lines)
 
 

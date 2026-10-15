@@ -80,6 +80,7 @@ nav:
   - Guides:
       - LLM gateways: guides/llm-gateways.md
       - Tools: guides/tools.md
+      - Images, audio and files: guides/multimodal.md
       - MCP servers: guides/mcp.md
       - Human approval: guides/human-approval.md
       - Streaming: guides/streaming.md
@@ -134,6 +135,7 @@ nav:
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:
+      - Multimodal threat model: security/multimodal.md
       - Status and limitations: about/limitations.md
       - Stability and deprecation: policy/stability.md
       - Design decisions: about/design-decisions.md

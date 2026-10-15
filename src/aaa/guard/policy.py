@@ -119,7 +119,7 @@ class GuardPolicy:
         return bool(self.specs_for(stage, "enforce"))
 
     async def run_one(self, spec: GuardSpec, content: str, ctx: GuardContext) -> Verdict:
-        h = content_hash(content)
+        h = content_hash(content + ("\0media" if ctx.has_media else ""))
         try:
             result = await asyncio.wait_for(spec.guard.check(content, ctx), spec.timeout_s)
             return Verdict(

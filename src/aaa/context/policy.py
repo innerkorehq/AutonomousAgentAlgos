@@ -31,7 +31,7 @@ from aaa.context.tokens import CalibratedCounter, HeuristicCounter, TokenCounter
 from aaa.llm.client import LLMClient
 from aaa.llm.types import Message, ToolSpec
 
-from aaa.context.strategies import TruncateToolResults  # isort: skip
+from aaa.context.strategies import ClearMedia, TruncateToolResults  # isort: skip
 
 
 @dataclass
@@ -98,7 +98,7 @@ class ContextPolicy:
         )
         self.counter: TokenCounter = counter or CalibratedCounter(HeuristicCounter())
         if strategies is None:
-            default: list[Strategy] = [TruncateToolResults(), ClearToolResults()]
+            default: list[Strategy] = [TruncateToolResults(), ClearMedia(), ClearToolResults()]
             if summarizer is not None:
                 default.append(Summarize(summarizer, summarizer_model))
             default.append(DropOldest())

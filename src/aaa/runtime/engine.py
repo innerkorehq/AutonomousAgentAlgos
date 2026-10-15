@@ -11,6 +11,7 @@ from datetime import timedelta
 from typing import Any, Protocol, Self, TypeVar
 
 from pydantic import BaseModel, Field
+from pydantic_core import to_jsonable_python
 
 from aaa.core.aio import raise_if_cancelling
 from aaa.core.errors import Redeliver, StoreUnavailable
@@ -30,6 +31,7 @@ from aaa.events import (
     SchemaRegistry,
 )
 from aaa.privacy import Redactor
+from aaa.runtime import media as _media
 from aaa.runtime.budget import Budget, Ledger
 from aaa.runtime.retention import ErasureReport, MemoryReport, PurgeReport, RetentionPolicy
 from aaa.runtime.tenancy import TenantScope, valid_tenant
@@ -196,6 +198,7 @@ class Engine:
         default_budget: Budget | None = None,
         blobs: BlobStore | None = None,
         claim_threshold: int = 16_384,
+        media_threshold: int = _media.THRESHOLD,
         sweep_interval_s: float | None = None,
         store_retry: RetryPolicy | None = None,
         is_transient: Callable[[BaseException], bool] | None = None,
@@ -210,6 +213,9 @@ class Engine:
         self.schemas = schemas or SchemaRegistry()
         self.default_budget = default_budget or Budget()
         self.blobs, self.claim_threshold = blobs, claim_threshold
+        self.media_threshold = (
+            media_threshold  # attachments of at least this many bytes go to the blob store
+        )
         self.sweep_interval_s = sweep_interval_s
         # How long to ride out a store outage before asking the bus to redeliver instead.
         self.store_retry = store_retry or RetryPolicy()
@@ -394,6 +400,10 @@ class Engine:
         if isinstance(data, dict) and data.keys() == {"$ns", "data"}:
             data = data["data"]
         return event.model_copy(update={"data": data})
+
+    async def media_bytes(self, part: Any) -> bytes:
+        """The bytes of an attachment (inline or in the blob store)."""
+        return await _media.read(part, self.blobs)
 
     # -- wiring -----------------------------------------------------------------------------
     def subscribe(
@@ -582,6 +592,9 @@ class Engine:
             if tenant is not None:
                 event = event.model_copy(update={"tenant": tenant})
             event = self.schemas.validate(event)
+            event = await _media.offload(
+                event, self.blobs, self.media_threshold
+            )  # attachment bytes -> blob store, before anything scrubs or measures the event
             if self.redactor is not None:
                 event = self.redactor.redact(event)
             claimed = await self._claim(event)
@@ -801,7 +814,9 @@ class Engine:
                     source=algo.name,
                     data={
                         "algo": algo.name,
-                        "input": input,
+                        "input": to_jsonable_python(
+                            input, serialize_unknown=True
+                        ),  # models (e.g. attachments) become their JSON form, as the log will hold them
                         "parent": parent,
                         "run_tag": tag,
                         "budget": run.budget.model_dump(),

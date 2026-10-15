@@ -36,6 +36,9 @@ class LLMConfig(BaseModel):
     responses_path: str = "/responses"  # for provider="openai_responses"
     timeout_s: float = 60.0
     params: dict[str, Any] = Field(default_factory=dict)  # default request params
+    modalities: list[str] | None = (
+        None  # attachment kinds this model accepts: any of 'image', 'audio', 'file' (text is implied); None = the client's default
+    )
     price_in_per_mtok: float | None = None  # optional client-side cost estimation
     price_out_per_mtok: float | None = None
     price_cached_in_per_mtok: float | None = (

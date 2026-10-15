@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
+
+from aaa.core.parts import Part
 
 
 class ToolCall(BaseModel):
@@ -21,6 +23,17 @@ class Message(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None  # for role="tool"
     name: str | None = None
+    # Attachments (images, audio, files) that come after `content`, in order. See aaa.llm.parts.
+    parts: list[Part] | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_parts(self, handler: Any) -> dict[str, Any]:
+        d = handler(self)
+        if d.get("parts") is None:
+            d.pop(
+                "parts", None
+            )  # text-only messages serialize exactly as they always did (hashes and logs stay identical)
+        return d
 
 
 class ToolSpec(BaseModel):

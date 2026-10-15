@@ -31,22 +31,41 @@ def message_text(m: Message) -> str:
     return "\n".join(p for p in parts if p)
 
 
+# Flat per-attachment estimates: providers charge by image size/detail or audio length, which we do not decode. Override per counter.
+MEDIA_TOKENS = {"image": 800, "audio": 1500, "file": 2000}
+
+
+def media_tokens(m: Message, table: dict[str, int] | None = None) -> int:
+    t = table or MEDIA_TOKENS
+    return sum(t.get(p.type, 1000) for p in m.parts or [])
+
+
 class HeuristicCounter:
     """`chars / chars_per_token` plus a fixed per-message overhead. The default of 3.5 characters per token errs
     on the high side for English prose and is about right for code and JSON, so it over-counts a little: the
     safe direction for a budget."""
 
     def __init__(
-        self, chars_per_token: float = 3.5, per_message: int = 4, per_tool_call: int = 8
+        self,
+        chars_per_token: float = 3.5,
+        per_message: int = 4,
+        per_tool_call: int = 8,
+        media: dict[str, int] | None = None,
     ) -> None:
         self.cpt, self.per_message, self.per_tool_call = chars_per_token, per_message, per_tool_call
+        self.media = (
+            media  # tokens charged per image / audio / file attachment (defaults to MEDIA_TOKENS)
+        )
 
     def text(self, s: str) -> int:
         return math.ceil(len(s) / self.cpt) if s else 0
 
     def count(self, messages: Sequence[Message], tools: Sequence[ToolSpec] = ()) -> int:
         n = sum(
-            self.per_message + self.text(message_text(m)) + self.per_tool_call * len(m.tool_calls)
+            self.per_message
+            + self.text(message_text(m))
+            + self.per_tool_call * len(m.tool_calls)
+            + media_tokens(m, self.media)
             for m in messages
         )
         if tools:
@@ -66,7 +85,10 @@ class TiktokenCounter:
         self.enc, self.per_message = tiktoken.get_encoding(encoding), per_message
 
     def count(self, messages: Sequence[Message], tools: Sequence[ToolSpec] = ()) -> int:
-        n = sum(self.per_message + len(self.enc.encode(message_text(m))) for m in messages)
+        n = sum(
+            self.per_message + len(self.enc.encode(message_text(m))) + media_tokens(m)
+            for m in messages
+        )
         if tools:
             n += len(
                 self.enc.encode(

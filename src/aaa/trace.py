@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
+from aaa.core.parts import is_media_dict
 from aaa.events import Event
 
 SpanKind = Literal[
@@ -136,7 +137,24 @@ def _usage(d: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _strip_media(v: Any) -> Any:
+    """Attachments never go into a trace: only their kind, type and size (bytes, base64 and blob references are dropped)."""
+    if is_media_dict(v):
+        return {
+            "type": v["type"],
+            "media_type": v["media_type"],
+            "size": v.get("size") or (v.get("blob") or {}).get("size"),
+        }
+    if isinstance(v, dict):
+        return {k: _strip_media(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_strip_media(x) for x in v]
+    return v
+
+
 def _clip(value: Any, limit: int) -> Any:
+    if not isinstance(value, str):
+        value = _strip_media(value)
     text = value if isinstance(value, str) else json.dumps(value, default=str)
     return (
         text if len(text) <= limit else text[:limit] + f"... [{len(text) - limit} more characters]"

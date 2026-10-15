@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 from collections import OrderedDict
 from collections.abc import Sequence
@@ -8,7 +9,14 @@ from typing import TYPE_CHECKING, Any
 from aaa.core.retry import RetryPolicy
 from aaa.events import Event
 from aaa.llm.client import LLMClient
-from aaa.llm.errors import ContextOverflow, FatalError, GuardrailBlocked, LLMError, StateNotFound
+from aaa.llm.errors import (
+    ContextOverflow,
+    FatalError,
+    GuardrailBlocked,
+    LLMError,
+    StateNotFound,
+    UnsupportedModality,
+)
 from aaa.llm.streaming import collect
 from aaa.llm.types import LLMRequest, LLMResponse, Message
 from aaa.runtime import Engine
@@ -93,11 +101,13 @@ class LLMHandler:
         from aaa.guard.types import GuardContext
 
         if enf.policy.enforces("input"):
-            ctx = GuardContext("input", e.run_id, e.tenant, dict(e.meta))
             msgs: list[Message] = []
             for m in req.messages:
-                if m.role == "user" and m.content:
-                    dec = await enf.decide("input", m.content, ctx, e)
+                if m.role == "user" and (m.content or m.parts):
+                    ctx = GuardContext(
+                        "input", e.run_id, e.tenant, dict(e.meta), has_media=bool(m.parts)
+                    )
+                    dec = await enf.decide("input", m.content or "", ctx, e)
                     if dec.action in (
                         "block",
                         "approve",
@@ -121,7 +131,33 @@ class LLMHandler:
                 resp.message.content = dec.text
         return resp
 
+    async def _prepare_media(self, req: LLMRequest) -> LLMRequest:
+        """Refuse attachments the client cannot send, and hand the client the bytes (blob references are resolved here, for this
+        call only: the request on the log keeps the references)."""
+        used = {p.type for m in req.messages for p in m.parts or []}
+        if not used:
+            return req
+        supported = frozenset(getattr(self.client, "modalities", frozenset({"text"})))
+        if missing := used - supported:
+            raise UnsupportedModality(missing, supported)
+        if self.engine is None:
+            return req
+        out: list[Message] = []
+        for m in req.messages:
+            if not m.parts:
+                out.append(m)
+                continue
+            parts = []
+            for p in m.parts:
+                if p.blob is not None:
+                    raw = await self.engine.media_bytes(p)
+                    p = p.model_copy(update={"data": base64.b64encode(raw).decode(), "blob": None})
+                parts.append(p)
+            out.append(m.model_copy(update={"parts": parts}))
+        return req.model_copy(update={"messages": out})
+
     async def _call(self, e: Event, req: LLMRequest) -> LLMResponse:
+        req = await self._prepare_media(req)
         stream = getattr(self.client, "stream", None)
         # An enforcing output guard must see the whole reply before anyone does, so the reply is not streamed.
         buffered = self.enforcer is not None and self.enforcer.policy.enforces("output")

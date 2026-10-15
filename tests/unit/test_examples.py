@@ -107,6 +107,12 @@ EXPECTED = {
         "vote: {'answer': '42', 'votes': 3, 'samples': 5, 'agreement': 0.6}",
         "critic loop: {'candidate': 'draft v2', 'iterations': 2}",
     ],
+    "multimodal.py": [
+        "answer: I can see 1 image (image/png, larger than the inline limit: True).",
+        "picture bytes in the log: False",
+        "blobs stored: 1",
+        "blobs after erasing the run: 0",
+    ],
     "vector_search.py": [
         "all: ['a', 'd', 'b', 'c']",
         "english, 2023 or later: ['a', 'c']",

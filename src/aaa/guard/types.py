@@ -44,6 +44,7 @@ class GuardContext:
     meta: dict[str, Any] = field(default_factory=dict)
     tool: str | None = None  # at the tool stages: which tool
     arguments: dict[str, Any] | None = None  # at tool_call: the parsed arguments
+    has_media: bool = False  # the message carries attachments (images/audio/files) that this text-only guard cannot read
 
 
 @runtime_checkable

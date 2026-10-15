@@ -81,5 +81,13 @@ def task_messages(inp: dict[str, Any], system: str) -> list[Message]:
     if "messages" in inp:
         return [Message.model_validate(m) for m in inp["messages"]]
     msgs = [Message(role="system", content=system)] if system else []
-    msgs.append(Message(role="user", content=str(inp.get("task", ""))))
+    user: dict[str, Any] = {"role": "user", "content": str(inp.get("task", ""))}
+    if inp.get(
+        "attachments"
+    ):  # images/audio/files for the task: parts or their JSON form (see aaa.llm.parts)
+        user["parts"] = [
+            p.model_dump(mode="json", exclude_none=True) if hasattr(p, "model_dump") else p
+            for p in inp["attachments"]
+        ]
+    msgs.append(Message.model_validate(user))
     return msgs

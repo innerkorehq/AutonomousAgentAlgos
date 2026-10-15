@@ -73,7 +73,7 @@ class Enforcer:
         mode: str = "enforce",
     ) -> Decision:
         async def runner(spec: GuardSpec, text: str, c: GuardContext) -> Verdict:
-            h = content_hash(text)
+            h = content_hash(text + ("\0media" if c.has_media else ""))
             vid = verdict_id(request.stream, spec, c.stage, h)
             cached = self._seen.get(vid) or await self._stored(request, vid)
             if cached is not None and cached.result.action != "redact":

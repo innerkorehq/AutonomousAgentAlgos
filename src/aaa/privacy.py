@@ -18,6 +18,7 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Protocol, runtime_checkable
 
+from aaa.core.parts import is_media_dict
 from aaa.events.event import Event
 
 # Never rewritten, whatever their value: the library routes, accounts and correlates on them.
@@ -182,8 +183,13 @@ class PatternRedactor(_Base):
         if isinstance(value, str):
             return self.scrub_text(value)
         if isinstance(value, Mapping):
+            media = is_media_dict(
+                value
+            )  # an attachment's base64 is not text: a pattern could corrupt it, and it cannot be redacted anyway
             return {
-                k: v if self._protected(k, depth) else self._walk(v, depth + 1)
+                k: v
+                if self._protected(k, depth) or (media and k == "data")
+                else self._walk(v, depth + 1)
                 for k, v in value.items()
             }
         if isinstance(value, list | tuple):

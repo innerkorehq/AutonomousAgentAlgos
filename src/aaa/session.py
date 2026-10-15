@@ -25,11 +25,11 @@ How it is built (nothing here is a new subsystem; it is the engine's own parts):
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from aaa.core.aio import wait_for
 from aaa.core.errors import AAAError
@@ -63,11 +63,23 @@ class SessionClosed(AAAError):
 class Turn(BaseModel):
     n: int
     user: str
+    attachments: list[dict[str, Any]] = Field(
+        default_factory=list
+    )  # images/audio/files sent with the message (see aaa.llm.parts)
     assistant: str | None = None
     status: Literal["pending", "done", "failed"] = "pending"
     run_id: str | None = None  # the child run that produced the reply
     state_id: str | None = None  # the provider's handle for the conversation after this turn
     reason: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_no_attachments(self, handler: Any) -> dict[str, Any]:
+        d = handler(self)
+        if not d.get("attachments"):
+            d.pop(
+                "attachments", None
+            )  # a turn without attachments serializes exactly as it did before they existed
+        return d
 
 
 class SummaryEntry(BaseModel):
@@ -85,7 +97,9 @@ def _apply(st: SessionState, e: Event) -> SessionState:
     d = e.data
     if e.type == MESSAGE:
         if d["turn"] == len(st.turns):  # a duplicate or out-of-order message is ignored
-            st.turns.append(Turn(n=d["turn"], user=d["text"]))
+            st.turns.append(
+                Turn(n=d["turn"], user=d["text"], attachments=d.get("attachments") or [])
+            )
     elif e.type == REPLY:
         if 0 <= d["turn"] < len(st.turns):
             t = st.turns[d["turn"]]
@@ -102,13 +116,29 @@ def _apply(st: SessionState, e: Event) -> SessionState:
 SESSION = Projection(SessionState, _apply, name="aaa.session", version=1, state_type=SessionState)
 
 
+def _attachments(items: Sequence[Any]) -> list[dict[str, Any]]:
+    """Validate attachments (parts or dicts) at the edge and return their JSON form."""
+    from pydantic import TypeAdapter
+
+    from aaa.llm.parts import Part
+
+    ta = TypeAdapter(Part)
+    return [ta.dump_python(ta.validate_python(p), mode="json", exclude_none=True) for p in items]
+
+
+def _user_message(t: Turn) -> Message:
+    return Message.model_validate(
+        {"role": "user", "content": t.user, **({"parts": t.attachments} if t.attachments else {})}
+    )
+
+
 def history_messages(st: SessionState, system: str = "") -> list[Message]:
     """The conversation so far as model messages: finished turns only (a failed turn leaves no trace)."""
     msgs = [Message(role="system", content=system)] if system else []
     for t in st.turns:
         if t.status == "done":
             msgs += [
-                Message(role="user", content=t.user),
+                _user_message(t),
                 Message(role="assistant", content=t.assistant or ""),
             ]
     return msgs
@@ -153,7 +183,7 @@ class SessionAlgo:
         sid = e.run_id or ""
         done = SessionState(turns=st.turns[:n], summaries=st.summaries)
         history = history_messages(done, self.system)
-        messages = [*history, Message(role="user", content=st.turns[n].user)]
+        messages = [*history, _user_message(st.turns[n])]
         out: list[Event] = []
         hint: dict[str, Any] = {}
         compacted = False
@@ -302,7 +332,7 @@ class Session:
             return None
         return meta.completed.get("reason") or meta.completed.get("kind") or "closed"
 
-    async def _submit(self, text: str) -> tuple[int, int]:
+    async def _submit(self, text: str, attachments: Sequence[Any] = ()) -> tuple[int, int]:
         if (why := await self._closed_reason()) is not None:
             raise SessionClosed(f"session {self.id} is closed ({why})")
         st = await self._state()
@@ -316,7 +346,12 @@ class Session:
                 stream=self.id,
                 run_id=self.id,
                 source="session",
-                data={"turn": n, "text": text, "nonce": nonce},
+                data={
+                    "turn": n,
+                    "text": text,
+                    "nonce": nonce,
+                    **({"attachments": _attachments(attachments)} if attachments else {}),
+                },
             )
         )
         if stored is None:
@@ -358,14 +393,16 @@ class Session:
             turn, d.get("text") or "", d.get("kind") or "failed", d.get("reason"), d.get("run_id")
         )
 
-    async def send(self, text: str, *, timeout_s: float | None = None) -> TurnResult:
-        """Say something and wait for the answer. One turn at a time (`SessionBusy`)."""
-        n, seq = await self._submit(text)
+    async def send(
+        self, text: str, *, attachments: Sequence[Any] = (), timeout_s: float | None = None
+    ) -> TurnResult:
+        """Say something (optionally with images, audio or files, see `aaa.llm.parts`) and wait for the answer. One turn at a time (`SessionBusy`)."""
+        n, seq = await self._submit(text, attachments)
         return await self.wait(n, timeout_s=timeout_s, _from_seq=seq)
 
-    async def stream(self, text: str) -> TurnStream:
+    async def stream(self, text: str, *, attachments: Sequence[Any] = ()) -> TurnStream:
         """Like `send`, but iterate the reply as it is written (needs an inner algorithm built with `stream=True`)."""
-        n, seq = await self._submit(text)
+        n, seq = await self._submit(text, attachments)
         return TurnStream(self, n, seq)
 
     async def close(self, reason: str = "closed") -> None:

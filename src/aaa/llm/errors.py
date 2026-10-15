@@ -56,3 +56,13 @@ class GuardrailBlocked(LLMError):
         super().__init__(
             f"blocked by policy at {stage}: {', '.join(self.categories) or 'unspecified'}"
         )
+
+
+class UnsupportedModality(LLMError):
+    """The request carries an attachment (image, audio, file) that this client cannot send. Nothing is dropped silently."""
+
+    def __init__(self, kinds: set[str] | list[str], supported: set[str] | frozenset[str]) -> None:
+        self.kinds, self.supported = sorted(kinds), sorted(supported)
+        super().__init__(
+            f"this client cannot send {', '.join(self.kinds)} attachments (it supports: {', '.join(self.supported)})"
+        )

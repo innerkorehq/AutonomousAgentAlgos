@@ -39,6 +39,7 @@ from aaa.llm.types import (
     ToolCallDelta,
     Usage,
 )
+from aaa.llm.wire_media import responses_content
 
 
 def _split_system(messages: Sequence[Message]) -> tuple[list[str], list[Message]]:
@@ -77,7 +78,7 @@ def input_items(messages: Sequence[Message]) -> list[dict[str, Any]]:
                 for t in m.tool_calls
             ]
         else:  # user, and system messages that are not at the start
-            items.append({"role": m.role, "content": m.content or ""})
+            items.append({"role": m.role, "content": responses_content(m)})
     return items
 
 
@@ -94,6 +95,7 @@ class OpenAIResponsesClient:
             raise LLMConfigError("base_url is required for openai_responses")
         self.config, self.store, self.truncation = config, store, truncation
         self.server_state = store
+        self.modalities = frozenset(config.modalities or ("text", "image", "file"))
         self._headers = {k: expand_env(v) for k, v in config.headers.items()}
         if config.api_key:
             self._headers.setdefault("authorization", f"Bearer {expand_env(config.api_key)}")

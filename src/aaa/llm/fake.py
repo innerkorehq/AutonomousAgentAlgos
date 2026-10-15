@@ -45,6 +45,9 @@ class FakeLLMClient:
         self._fn = script if callable(script) else None
         self._it = None if callable(script) else iter(script)
         self.requests: list[LLMRequest] = []
+        self.modalities = frozenset(
+            {"text", "image", "audio", "file"}
+        )  # a fake takes everything; set a narrower set to test rejection
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         self.requests.append(request)

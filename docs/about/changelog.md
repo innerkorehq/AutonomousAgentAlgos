@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+**Multimodal messages** (see [the guide](../guides/multimodal.md) and [threat model](../security/multimodal.md))
+
+- `Message.parts`: images, audio and files after the text (`aaa.llm.parts`: `ImagePart`, `AudioPart`, `FilePart`), validated at creation (type vs kind, image signatures, https-only URLs, size). Text-only messages serialize exactly as before.
+- The engine moves attachment bytes into the blob store before an event is appended (salted per run, so erasing a run deletes exactly its media); the log keeps references. Without a blob store, attachments over 256 KiB are refused. `engine.start` now stores `input` in its JSON form.
+- Clients declare `modalities`; an unsupported attachment fails the call with `UnsupportedModality` instead of being dropped. OpenAI chat-completions and Responses clients send images, audio (chat) and files.
+- `Session.send(..., attachments=)`, `{"attachments": [...]}` as an algorithm input, `GuardContext.has_media`, attachment-aware token counting, the `ClearMedia` context strategy (in the default policy), and trace/redactor handling that never exposes or corrupts attachment bytes.
+
 **Event-format safety net** (see [the guide](../guides/evolving-events.md))
 
 - Frozen fixtures of real v0.2.0 logs (every built-in event type, 24 scenarios) and the Projection state they fold to, replayed by the current code on every CI run (`tests/unit/test_event_compat.py`); the trace and CloudEvents exporters are checked against them too.

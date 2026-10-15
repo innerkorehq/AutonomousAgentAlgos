@@ -104,6 +104,7 @@ Hosted guards (OpenAI, Bedrock, Azure, Lakera) send the text to the provider: on
 - **Streaming.** With an enforcing `output` guard the reply is buffered (not streamed), because a reply that has already reached the user cannot be
   taken back. Disable output enforcement if you need streaming.
 - **Latency.** Every enforcing guard adds its own latency to each model call (guards at a stage run in parallel). `LLMJudgeGuard` and hosted guards add a network round trip.
+- **Attachments are not checked.** Guards read text. `GuardContext.has_media` says a message carries images, audio or files (a message that is only an attachment is still passed in, with empty text), so a policy can block or flag it; see [images, audio and files](multimodal.md).
 - **Only user messages are checked at `input`.** System prompts are yours; tool output is covered by `tool_result`; and the model's own tool calls by `tool_call`.
 - **Verified.** The engine integration is tested end to end offline, Presidio runs for real in CI, and the OpenAI Moderation reply is validated against the OpenAI
   SDK's response types. Not run: a live moderation endpoint, Presidio on non-English text.

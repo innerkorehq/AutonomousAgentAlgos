@@ -125,7 +125,7 @@ jobs:
           uv pip install presidio-analyzer presidio-anonymizer openai pip
           uv run --no-sync python -m spacy download en_core_web_sm
       - name: Adapter tests
-        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard.py tests/unit/test_guard_adapters.py
+        run: uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_guard.py tests/unit/test_guard_adapters.py tests/unit/test_multimodal.py
 
   vector-adapters:
     # pgvector (real PostgreSQL with the extension) and Qdrant (its in-process mode) run the shared contract suite.
