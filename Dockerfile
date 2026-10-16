@@ -13,7 +13,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
 RUN useradd --system --uid 10001 --home-dir /app --create-home aaa
 COPY --from=build /wheels /wheels
-RUN pip install --no-index --find-links /wheels autonomous-agent-algos aaa-server asyncpg uvicorn && rm -rf /wheels
+RUN pip install --no-index --find-links /wheels autonomous-agent-architecture aaa-server asyncpg uvicorn && rm -rf /wheels
 COPY deploy/app.py /app/app.py
 WORKDIR /app
 USER 10001

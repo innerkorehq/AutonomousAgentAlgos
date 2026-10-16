@@ -80,7 +80,7 @@ Every check appends an `aaa.guard.verdict` event: guard, version, stage, action,
 |---|---|---|
 | OpenAI Moderation | `aaa.guard.openai_moderation.OpenAIModerationGuard(api_key, thresholds=)` | none (plain HTTP) |
 | Microsoft Presidio | `aaa.guard.presidio.PresidioGuard(entities=, action=)` and `PresidioRedactor` (an event redactor for `Engine(redactor=)`) | `pip install presidio-analyzer presidio-anonymizer` and `python -m spacy download en_core_web_sm` |
-| AWS Bedrock Guardrails | `aaa.guard.bedrock.BedrockGuard(guardrail_id, version)`: `ApplyGuardrail` checks text without calling any model | `pip install "autonomous-agent-algos[bedrock]"` |
+| AWS Bedrock Guardrails | `aaa.guard.bedrock.BedrockGuard(guardrail_id, version)`: `ApplyGuardrail` checks text without calling any model | `pip install "autonomous-agent-architecture[bedrock]"` |
 | Azure Prompt Shields | `aaa.guard.azure.AzurePromptShieldGuard(endpoint, api_key)`: jailbreaks in user input, injected instructions in tool results | none (plain HTTP) |
 | Lakera Guard | `aaa.guard.lakera.LakeraGuard(api_key, project_id=)` | none (plain HTTP) |
 | Guardrails AI | `aaa.guard.guardrails_ai.GuardrailsAIGuard(guard)`: any `Guard` / `AsyncGuard` and its validators | `pip install guardrails-ai` |

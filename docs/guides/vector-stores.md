@@ -22,8 +22,8 @@ acme sees: ['acme invoice terms']
 | Store | Install | Notes |
 |---|---|---|
 | `InMemoryVectorStore` | none | exact, brute force; the reference the shared tests compare the others to |
-| `PgVectorStore(dsn, dimension=, metric=, table=)` | `pip install "autonomous-agent-algos[pgvector]"` + `CREATE EXTENSION vector` | one table, HNSW index, jsonb metadata, filters become SQL |
-| `QdrantStore(url=… \| location=":memory:", dimension=)` | `pip install "autonomous-agent-algos[qdrant]"` | server, cloud, or in-process |
+| `PgVectorStore(dsn, dimension=, metric=, table=)` | `pip install "autonomous-agent-architecture[pgvector]"` + `CREATE EXTENSION vector` | one table, HNSW index, jsonb metadata, filters become SQL |
+| `QdrantStore(url=… \| location=":memory:", dimension=)` | `pip install "autonomous-agent-architecture[qdrant]"` | server, cloud, or in-process |
 | `SqliteVecStore("vectors.db", dimension=)` | `[sqlitevec]` | one file; brute force and exact; every filter runs in SQL before the top-k cut; needs a Python whose `sqlite3` can load extensions |
 | `LanceDBStore("./lance", dimension=)` | `[lancedb]` | embedded directory or object storage; metadata filters are exact but evaluated client-side over growing candidate batches (see below) |
 | `PineconeStore(index_name=… \| index_host=…, dimension=)` | `[pinecone]` | Pinecone's own namespaces; metadata flat with a 40 KB limit; writes wait for visibility (`consistent=True`); no `delete_where` (serverless cannot) |

@@ -117,6 +117,6 @@ anyio_mode = "auto"
 
 ## How these docs stay correct
 
-Every example in these docs lives in [`examples/`](https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/examples) and is
+Every example in these docs lives in [`examples/`](https://github.com/innerkorehq/AutonomousAgentArchitecture/tree/master/examples) and is
 **executed by the test suite**, with its output asserted (`tests/unit/test_examples.py`). If an API change breaks a documented
 example, the build fails.

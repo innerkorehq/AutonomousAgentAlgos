@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please **do not open a public issue** for a security problem. Use GitHub's private vulnerability reporting:
-<https://github.com/innerkorehq/AutonomousAgentAlgos/security/advisories/new>
+<https://github.com/innerkorehq/AutonomousAgentArchitecture/security/advisories/new>
 
 Include what you found, how to reproduce it, and the version. You will get an acknowledgement within a few working days. A fix is released as a
 patch version of the latest minor release, and the advisory credits you unless you prefer otherwise.

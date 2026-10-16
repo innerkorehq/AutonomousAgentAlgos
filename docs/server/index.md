@@ -4,16 +4,16 @@
 
 `aaa-server` is a **separate package** from the [AAA library](../index.md): the library has no web dependencies, and the server releases on its own schedule.
 
-[![PyPI](https://img.shields.io/pypi/v/aaa-server)](https://pypi.org/project/aaa-server/) &nbsp; Library: [`autonomous-agent-algos`](https://pypi.org/project/autonomous-agent-algos/) · [docs home](../index.md)
+[![PyPI](https://img.shields.io/pypi/v/aaa-server)](https://pypi.org/project/aaa-server/) &nbsp; Library: [`autonomous-agent-architecture`](https://pypi.org/project/autonomous-agent-architecture/) · [docs home](../index.md)
 
 ## Install
 
 ```bash
-pip install aaa-server                  # the server (pulls in autonomous-agent-algos>=0.3.0)
+pip install aaa-server                  # the server (pulls in autonomous-agent-architecture>=0.3.0)
 pip install "aaa-server[jwt,redis]"    # + JWT/JWKS authentication, + the shared Redis rate limiter
 ```
 
-| `aaa-server` | needs `autonomous-agent-algos` | Python |
+| `aaa-server` | needs `autonomous-agent-architecture` | Python |
 |---|---|---|
 | 0.1.x | `>=0.3.0` | 3.11, 3.12, 3.13 |
 
@@ -76,4 +76,4 @@ A complete, runnable, offline version (including an approval over HTTP and a sec
 ## What it is not
 
 It is not an identity provider, a TLS terminator or a WAF: put a reverse proxy in front for TLS and header/body timeouts, and an identity provider behind the JWT authenticator. Rate limits are per principal, not per IP. `aaa-server` is **0.1, alpha**: the HTTP surface may change in minor releases, and the A2A endpoint is experimental
-(see the [stability policy](../policy/stability.md)). Source and issues: [github.com/innerkorehq/AutonomousAgentAlgos](https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/packages/aaa-server).
+(see the [stability policy](../policy/stability.md)). Source and issues: [github.com/innerkorehq/AutonomousAgentArchitecture](https://github.com/innerkorehq/AutonomousAgentArchitecture/tree/master/packages/aaa-server).

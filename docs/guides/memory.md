@@ -75,7 +75,7 @@ algorithm. That buys:
 
 ## Backends
 
-All four are optional extras, imported lazily: `pip install "autonomous-agent-algos[mem0]"` (also `graphiti`, `langgraph`, `langmem`).
+All four are optional extras, imported lazily: `pip install "autonomous-agent-architecture[mem0]"` (also `graphiti`, `langgraph`, `langmem`).
 Supermemory needs none: it is plain HTTP.
 
 === "Mem0"

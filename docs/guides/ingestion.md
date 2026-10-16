@@ -20,7 +20,7 @@ after rm   : added=0 updated=0 unchanged=1 removed=1 embedded_chunks=0
 
 | | |
 |---|---|
-| `DirectoryLoader(root)` | every text file under a folder (by extension), `FileLoader(path)` for one file, `PDFLoader(path)` one document per page (`pip install "autonomous-agent-algos[pdf]"`; text only, no OCR) |
+| `DirectoryLoader(root)` | every text file under a folder (by extension), `FileLoader(path)` for one file, `PDFLoader(path)` one document per page (`pip install "autonomous-agent-architecture[pdf]"`; text only, no OCR) |
 | `RecursiveChunker(size, overlap)` | cuts on the largest natural boundary (paragraph, line, sentence, word) and carries `overlap` into the next chunk; `RecursiveChunker.by_tokens(256)` sizes by tokens |
 | `MarkdownChunker()` | one chunk per section, each with `meta["heading"]` such as `Guide > Install > Linux`; code fences are not mistaken for headings |
 | `Pipeline(index, chunker, scope=, embedder_id=)` | `await pipeline.sync(*loaders, prune=True)` -> `SyncReport` |

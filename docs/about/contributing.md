@@ -5,8 +5,8 @@ Contributions are welcome under the project's [MIT license](license.md).
 ## Set up
 
 ```bash
-git clone https://github.com/innerkorehq/AutonomousAgentAlgos.git
-cd AutonomousAgentAlgos
+git clone https://github.com/innerkorehq/AutonomousAgentArchitecture.git
+cd AutonomousAgentArchitecture
 uv sync --extra docs        # dev tools, Postgres/Redis clients, and the docs toolchain
 uv run pytest -q            # the full suite (starts throwaway Postgres/Redis if their binaries exist)
 uv run ruff check . && uv run ruff format --check .
@@ -70,8 +70,8 @@ is stored in the repository.
 
 **One-time setup**
 
-1. On PyPI, add a *pending publisher* (Account → Publishing): project `autonomous-agent-algos`, owner `innerkorehq`, repository
-   `AutonomousAgentAlgos`, workflow `release.yml`, environment `pypi`. Repeat on TestPyPI with environment `testpypi` if you want dry runs.
+1. On PyPI, add a *pending publisher* (Account → Publishing): project `autonomous-agent-architecture`, owner `innerkorehq`, repository
+   `AutonomousAgentArchitecture`, workflow `release.yml`, environment `pypi`. Repeat on TestPyPI with environment `testpypi` if you want dry runs.
 2. In the GitHub repository, create the environments `pypi` and `testpypi` (Settings → Environments). Add a required reviewer to `pypi`
    so a publish needs a human click.
 

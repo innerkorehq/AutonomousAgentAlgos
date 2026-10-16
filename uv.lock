@@ -11,7 +11,7 @@ resolution-markers = [
 [manifest]
 members = [
     "aaa-server",
-    "autonomous-agent-algos",
+    "autonomous-agent-architecture",
 ]
 
 [[package]]
@@ -19,7 +19,7 @@ name = "aaa-server"
 version = "0.1.0"
 source = { editable = "packages/aaa-server" }
 dependencies = [
-    { name = "autonomous-agent-algos" },
+    { name = "autonomous-agent-architecture" },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
@@ -34,7 +34,7 @@ redis = [
 
 [package.metadata]
 requires-dist = [
-    { name = "autonomous-agent-algos", editable = "." },
+    { name = "autonomous-agent-architecture", editable = "." },
     { name = "pyjwt", extras = ["crypto"], marker = "extra == 'jwt'", specifier = ">=2.8" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
     { name = "starlette", specifier = ">=0.37" },
@@ -391,8 +391,8 @@ wheels = [
 ]
 
 [[package]]
-name = "autonomous-agent-algos"
-version = "0.3.0"
+name = "autonomous-agent-architecture"
+version = "0.3.1"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -497,9 +497,9 @@ requires-dist = [
     { name = "asyncpg", marker = "extra == 'pgvector'", specifier = ">=0.29" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.29" },
     { name = "autoevals", marker = "extra == 'autoevals'", specifier = ">=0.0.100" },
-    { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'langfuse'" },
-    { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'langsmith'" },
-    { name = "autonomous-agent-algos", extras = ["otel"], marker = "extra == 'phoenix'" },
+    { name = "autonomous-agent-architecture", extras = ["otel"], marker = "extra == 'langfuse'" },
+    { name = "autonomous-agent-architecture", extras = ["otel"], marker = "extra == 'langsmith'" },
+    { name = "autonomous-agent-architecture", extras = ["otel"], marker = "extra == 'phoenix'" },
     { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.35" },
     { name = "chromadb", marker = "extra == 'chroma'", specifier = ">=1.0" },
     { name = "graphiti-core", marker = "extra == 'graphiti'", specifier = ">=0.30" },

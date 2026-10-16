@@ -17,7 +17,7 @@ from aaa.llm.types import EmbedResponse, LLMRequest, LLMResponse, Message, Usage
 
 
 class LiteLLMClient:
-    """In-process LiteLLM SDK adapter (`pip install autonomous-agent-algos[litellm]`)."""
+    """In-process LiteLLM SDK adapter (`pip install autonomous-agent-architecture[litellm]`)."""
 
     def __init__(self, config: LLMConfig) -> None:
         try:

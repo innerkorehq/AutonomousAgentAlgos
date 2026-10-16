@@ -1,7 +1,7 @@
 [project]
-name = "autonomous-agent-algos"
-version = "0.3.0"
-description = "Async, event-driven library of production-deployable agent algorithms over arbitrary data."
+name = "autonomous-agent-architecture"
+version = "0.3.1"
+description = "Autonomous Agent Architecture (AAA): an async, event-driven architecture and library for production agents: algorithms, tools, memory, evals and guardrails over arbitrary data."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -32,9 +32,9 @@ langgraph = ["langgraph>=1.0"]
 langmem = ["langgraph>=1.0", "langmem>=0.0.30"]
 # Observability (aaa.observe): OTLP/HTTP covers Langfuse, LangSmith and Phoenix; the sinks are presets over it.
 otel = ["opentelemetry-sdk>=1.30", "opentelemetry-exporter-otlp-proto-http>=1.30", "opentelemetry-semantic-conventions>=0.50b0"]
-langfuse = ["autonomous-agent-algos[otel]"]
-langsmith = ["autonomous-agent-algos[otel]"]
-phoenix = ["autonomous-agent-algos[otel]"]
+langfuse = ["autonomous-agent-architecture[otel]"]
+langsmith = ["autonomous-agent-architecture[otel]"]
+phoenix = ["autonomous-agent-architecture[otel]"]
 # Eval libraries (aaa.eval.*). Only autoevals is light enough to lock; deepeval, ragas and inspect-ai are installed by hand
 # (see the evals guide) because they are large and pin LangChain/pydantic/protobuf versions that clash with each other.
 # autoevals imports the openai package even when you hand it another client, but does not declare it
@@ -58,11 +58,11 @@ docs = ["mkdocs>=1.6,<2", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.26"]
 aaa = "aaa.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
-Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/"
-Source = "https://github.com/innerkorehq/AutonomousAgentAlgos"
+Homepage = "https://github.com/innerkorehq/AutonomousAgentArchitecture"
+Documentation = "https://innerkorehq.github.io/AutonomousAgentArchitecture/"
+Source = "https://github.com/innerkorehq/AutonomousAgentArchitecture"
 Server = "https://pypi.org/project/aaa-server/"
-Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
+Issues = "https://github.com/innerkorehq/AutonomousAgentArchitecture/issues"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff", "pyright", "asyncpg>=0.29", "redis>=5.0", "aaa-server[jwt,redis]"]

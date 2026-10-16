@@ -22,7 +22,7 @@ kinds: ['agent', 'llm', 'tool', 'llm']
 | Sink | Install | Sends to |
 |---|---|---|
 | `InMemorySink`, `ConsoleSink`, `CallableSink` | none | tests, a terminal, your own function |
-| `OTelSink(exporter)` | `pip install "autonomous-agent-algos[otel]"` | any OpenTelemetry `SpanExporter` (OTLP/HTTP, console, vendor exporters) |
+| `OTelSink(exporter)` | `pip install "autonomous-agent-architecture[otel]"` | any OpenTelemetry `SpanExporter` (OTLP/HTTP, console, vendor exporters) |
 | `LangfuseSink(public_key, secret_key, host=...)` | `[langfuse]` | Langfuse, over its OTLP endpoint |
 | `LangSmithSink(api_key, project=...)` | `[langsmith]` | LangSmith, over its OTLP endpoint |
 | `PhoenixSink(endpoint, project=...)` | `[phoenix]` | Arize Phoenix (OpenInference attributes) |

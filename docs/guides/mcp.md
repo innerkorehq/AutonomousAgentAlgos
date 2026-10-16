@@ -15,7 +15,7 @@ weather__reset_station   delivery=at_most_once  approval=True
 The forecast says: Lisbon: sunny for the next 3 days
 ```
 
-Install the client with `pip install "autonomous-agent-algos[mcp]"`. It works with both major versions of the official `mcp` SDK
+Install the client with `pip install "autonomous-agent-architecture[mcp]"`. It works with both major versions of the official `mcp` SDK
 (1.x and 2.x), which spell several fields differently; the adapter hides that.
 
 ## Connecting

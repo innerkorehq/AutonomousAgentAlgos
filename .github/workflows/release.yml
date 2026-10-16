@@ -38,7 +38,7 @@ jobs:
         id: exists
         run: |
           version="$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
-          code="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/autonomous-agent-algos/${version}/json")"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/autonomous-agent-architecture/${version}/json")"
           if [ "$code" = "200" ]; then echo "published=true" >> "$GITHUB_OUTPUT"; echo "::notice::$version is already on PyPI; the publish step will be skipped"; else echo "published=false" >> "$GITHUB_OUTPUT"; fi
       - name: Build sdist and wheel
         run: uv build
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/autonomous-agent-algos
+      url: https://pypi.org/p/autonomous-agent-architecture
     permissions:
       id-token: write # required for Trusted Publishing
     steps:
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/autonomous-agent-algos
+      url: https://test.pypi.org/p/autonomous-agent-architecture
     permissions:
       id-token: write
     steps:

@@ -1,8 +1,16 @@
 # Changelog
 
+## 0.3.1 (renamed)
+
+**The project is now "Autonomous Agent Architecture" (AAA).** It is much more than a set of algorithms, and the name now says so. What changed:
+
+- The PyPI distribution is **`autonomous-agent-architecture`** (it was `autonomous-agent-algos`, whose last release is 0.3.0). `pip install autonomous-agent-architecture`.
+- The GitHub repository is `innerkorehq/AutonomousAgentArchitecture` and the documentation is at <https://innerkorehq.github.io/AutonomousAgentArchitecture/>. The old repository address redirects; the old documentation address does not.
+- **The import name is unchanged: `import aaa`.** No code changes are needed beyond the package name in your requirements. The code is otherwise identical to 0.3.0.
+
 ## aaa-server 0.1.0 (2026-10-16)
 
-First release of the separate [`aaa-server`](../server/index.md) package (it requires `autonomous-agent-algos>=0.3.0`). Everything in the "HTTP server" and "MCP server and A2A" entries under 0.3.0 below ships here, plus: `POST /mcp` and the experimental A2A endpoint, the `Dockerfile`/`compose.yaml` deployment, and the fix that builds an `async` factory inside the server's own event loop.
+First release of the separate [`aaa-server`](../server/index.md) package (it requires `autonomous-agent-architecture>=0.3.1`). Everything in the "HTTP server" and "MCP server and A2A" entries under 0.3.0 below ships here, plus: `POST /mcp` and the experimental A2A endpoint, the `Dockerfile`/`compose.yaml` deployment, and the fix that builds an `async` factory inside the server's own event loop.
 
 ## 0.3.0 (2026-10-16)
 

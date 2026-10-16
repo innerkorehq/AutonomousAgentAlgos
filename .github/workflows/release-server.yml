@@ -31,7 +31,7 @@ jobs:
           tag = os.environ.get("GITHUB_REF_NAME", "")
           if os.environ.get("GITHUB_EVENT_NAME") == "release" and tag != "server-v" + meta["version"]:
               raise SystemExit(f"release tag {tag!r} does not match aaa-server version {meta['version']!r}")
-          core = [d for d in meta["dependencies"] if d.startswith("autonomous-agent-algos")]
+          core = [d for d in meta["dependencies"] if d.startswith("autonomous-agent-architecture")]
           if any("dev" in d for d in core):
               raise SystemExit(f"the dependency on the library is still a development floor: {core}")
           PY

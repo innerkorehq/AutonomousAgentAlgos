@@ -1,8 +1,8 @@
-site_name: AutonomousAgentAlgos (AAA)
-site_description: Async, event-driven library of production-deployable agent algorithms over arbitrary data, with a pluggable LLM gateway layer.
-site_url: https://innerkorehq.github.io/AutonomousAgentAlgos/
-repo_url: https://github.com/innerkorehq/AutonomousAgentAlgos
-repo_name: innerkorehq/AutonomousAgentAlgos
+site_name: Autonomous Agent Architecture (AAA)
+site_description: "Autonomous Agent Architecture (AAA), an async, event-driven architecture for production agents, with a pluggable LLM gateway layer."
+site_url: https://innerkorehq.github.io/AutonomousAgentArchitecture/
+repo_url: https://github.com/innerkorehq/AutonomousAgentArchitecture
+repo_name: innerkorehq/AutonomousAgentArchitecture
 edit_uri: edit/master/docs/
 copyright: Copyright &copy; 2026 Innerkore Technologies &middot; MIT License
 

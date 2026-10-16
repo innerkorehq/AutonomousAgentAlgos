@@ -1,4 +1,4 @@
-"""Use an MCP server's tools in an agent. Needs `pip install "autonomous-agent-algos[mcp]"`.
+"""Use an MCP server's tools in an agent. Needs `pip install "autonomous-agent-architecture[mcp]"`.
 
 The example writes a tiny MCP server to a temporary file and launches it as a subprocess, which is
 exactly what you would do with a real one (`MCPClient.stdio("uvx", ["some-mcp-server"])`) or a remote

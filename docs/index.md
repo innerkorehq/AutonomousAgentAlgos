@@ -1,6 +1,8 @@
-# AutonomousAgentAlgos (AAA)
+# Autonomous Agent Architecture (AAA)
 
-**An async, event-driven Python library of agent algorithms you can run in production, over data of any shape, with any LLM gateway.**
+**An async, event-driven architecture for production agents: the algorithms, the durable runtime, tools, memory, evals and guardrails, over data of any shape, with any LLM gateway.**
+
+`pip install autonomous-agent-architecture` · `import aaa` · "AAA" is the short name.
 
 AAA is for the part of an agent system that is *not* the model: the loops, plans, routing, retries, budgets,
 approvals, persistence and recovery that decide whether an agent is a demo or something you can put on call.
@@ -149,4 +151,4 @@ success - 17 x 23 = 391
 4. Need an API in front of it? See the [`aaa-server` overview](server/index.md).
 5. Keep the [event catalog](reference/event-catalog.md) and [configuration reference](operations/configuration.md) open while you build.
 
-AAA is MIT licensed. Source: [github.com/innerkorehq/AutonomousAgentAlgos](https://github.com/innerkorehq/AutonomousAgentAlgos).
+AAA is MIT licensed. Source: [github.com/innerkorehq/AutonomousAgentArchitecture](https://github.com/innerkorehq/AutonomousAgentArchitecture).

@@ -2,7 +2,7 @@
 
 Not executed by the test suite (it needs a database and runs forever); the cluster behavior is
 covered by tests/unit/test_multiprocess.py, which launches real worker processes and SIGKILLs them.
-Requires: pip install "autonomous-agent-algos[postgres]"   and a reachable PostgreSQL."""
+Requires: pip install "autonomous-agent-architecture[postgres]"   and a reachable PostgreSQL."""
 
 import asyncio
 import os

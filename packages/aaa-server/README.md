@@ -1,11 +1,11 @@
 # aaa-server
 
-HTTP/SSE server for [AAA](https://github.com/innerkorehq/AutonomousAgentAlgos) agents ([`autonomous-agent-algos`](https://pypi.org/project/autonomous-agent-algos/)): bearer authentication, tenants taken only from the credential, rate limits and quotas, server-side budgets, human approvals over HTTP, resumable event streams, plus MCP and (experimental) A2A endpoints.
+HTTP/SSE server for [AAA](https://github.com/innerkorehq/AutonomousAgentArchitecture) agents ([`autonomous-agent-architecture`](https://pypi.org/project/autonomous-agent-architecture/)): bearer authentication, tenants taken only from the credential, rate limits and quotas, server-side budgets, human approvals over HTTP, resumable event streams, plus MCP and (experimental) A2A endpoints.
 
-**Documentation:** [overview](https://innerkorehq.github.io/AutonomousAgentAlgos/server/) · [server guide](https://innerkorehq.github.io/AutonomousAgentAlgos/guides/server/) · [threat model](https://innerkorehq.github.io/AutonomousAgentAlgos/security/server/) · [API reference](https://innerkorehq.github.io/AutonomousAgentAlgos/reference/api/server/) · [library docs](https://innerkorehq.github.io/AutonomousAgentAlgos/) · [changelog](https://innerkorehq.github.io/AutonomousAgentAlgos/about/changelog/)
+**Documentation:** [overview](https://innerkorehq.github.io/AutonomousAgentArchitecture/server/) · [server guide](https://innerkorehq.github.io/AutonomousAgentArchitecture/guides/server/) · [threat model](https://innerkorehq.github.io/AutonomousAgentArchitecture/security/server/) · [API reference](https://innerkorehq.github.io/AutonomousAgentArchitecture/reference/api/server/) · [library docs](https://innerkorehq.github.io/AutonomousAgentArchitecture/) · [changelog](https://innerkorehq.github.io/AutonomousAgentArchitecture/about/changelog/)
 
 ```bash
-pip install aaa-server                  # needs autonomous-agent-algos>=0.3.0 (installed automatically)
+pip install aaa-server                  # needs autonomous-agent-architecture>=0.3.0 (installed automatically)
 pip install "aaa-server[jwt,redis]"    # + JWT/JWKS auth, + the shared Redis rate limiter
 ```
 
@@ -30,5 +30,5 @@ async def build() -> ServerConfig:
 aaa-server serve myapp.server:build     # 127.0.0.1:8000 by default
 ```
 
-Read the [threat model](https://innerkorehq.github.io/AutonomousAgentAlgos/security/server/) before exposing it: put a TLS-terminating reverse proxy in front.
-Status: **alpha (0.1)**. MIT licensed. Source: <https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/packages/aaa-server>.
+Read the [threat model](https://innerkorehq.github.io/AutonomousAgentArchitecture/security/server/) before exposing it: put a TLS-terminating reverse proxy in front.
+Status: **alpha (0.1)**. MIT licensed. Source: <https://github.com/innerkorehq/AutonomousAgentArchitecture/tree/master/packages/aaa-server>.

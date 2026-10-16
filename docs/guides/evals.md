@@ -138,7 +138,7 @@ reporting) instead of the library's OpenAI default. Install the library you use;
 
 | Library | Adapter | Install |
 |---|---|---|
-| autoevals (Braintrust) | `aaa.eval.autoevals`: `AutoevalsMetric(scorer)`, `openai_shim(client)` | `pip install "autonomous-agent-algos[autoevals]"` (adds `openai`, which autoevals imports but does not declare) |
+| autoevals (Braintrust) | `aaa.eval.autoevals`: `AutoevalsMetric(scorer)`, `openai_shim(client)` | `pip install "autonomous-agent-architecture[autoevals]"` (adds `openai`, which autoevals imports but does not declare) |
 | DeepEval | `aaa.eval.deepeval`: `DeepEvalMetric(metric)`, `DeepEvalJudge(client)` | `pip install deepeval` |
 | Ragas | `aaa.eval.ragas`: `RagasMetric(metric)`, `RagasJudge(client)` | `pip install ragas "langchain-community<0.4" "langchain-core<1" "langchain-openai<1"` |
 | Inspect AI | `aaa.eval.inspect`: `aaa_solver(setup)` | `pip install inspect-ai` |

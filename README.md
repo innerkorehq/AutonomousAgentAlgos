@@ -1,13 +1,14 @@
-# AutonomousAgentAlgos (AAA)
+# Autonomous Agent Architecture (AAA)
 
-Async, **event-driven** library of production-deployable agent algorithms that run over
-**arbitrary user data**, with a pluggable LLM gateway layer.
+**Autonomous Agent Architecture (AAA)**: an async, **event-driven** architecture for production agents. The
+algorithms, the durable runtime, tools, memory, evals and guardrails, over **arbitrary user data**, with a
+pluggable LLM gateway layer. (`pip install autonomous-agent-architecture`, `import aaa`.)
 
-**Documentation: <https://innerkorehq.github.io/AutonomousAgentAlgos/>** — quickstart, concepts, guides for every
+**Documentation: <https://innerkorehq.github.io/AutonomousAgentArchitecture/>** — quickstart, concepts, guides for every
 algorithm, clustering, the tool execution guard, operations, security, API reference, and an honest
-[status and limitations](https://innerkorehq.github.io/AutonomousAgentAlgos/about/limitations/) page.
+[status and limitations](https://innerkorehq.github.io/AutonomousAgentArchitecture/about/limitations/) page.
 The README below is a condensed overview; the docs are the reference.
-**HTTP server:** the separate [`aaa-server`](https://pypi.org/project/aaa-server/) package ([docs](https://innerkorehq.github.io/AutonomousAgentAlgos/server/)).
+**HTTP server:** the separate [`aaa-server`](https://pypi.org/project/aaa-server/) package ([docs](https://innerkorehq.github.io/AutonomousAgentArchitecture/server/)).
 
 ```python
 async with Engine() as eng:
@@ -48,7 +49,7 @@ so each turn sends only what is new.
 
 ## HTTP server (separate package)
 [`pip install aaa-server`](https://pypi.org/project/aaa-server/) puts an engine behind a port: bearer auth (API keys or JWT/JWKS), tenants taken only from the credential, rate limits and event-sourced quotas, server-side budgets,
-tool approvals over HTTP and resumable SSE event streams. `aaa-server serve myapp.server:build` listens on loopback by default. See the [`aaa-server` docs](https://innerkorehq.github.io/AutonomousAgentAlgos/server/).
+tool approvals over HTTP and resumable SSE event streams. `aaa-server serve myapp.server:build` listens on loopback by default. See the [`aaa-server` docs](https://innerkorehq.github.io/AutonomousAgentArchitecture/server/).
 
 ## MCP and context management
 `aaa.mcp.MCPClient` connects to any MCP server (stdio, HTTP, or your own session; mcp SDK 1.x and 2.x) and turns its tools into guarded AAA tools,
@@ -82,7 +83,7 @@ GeneratorCritic, WorkflowGraph (deterministic DAG), FSM, SelfConsistency, RAGAge
 |---|---|---|
 | `InMemoryEventStore` | tests, notebooks | nothing survives the process |
 | `SQLiteEventStore` | one machine, durable | stdlib, WAL; single engine process |
-| `PostgresEventStore` | production system of record | `pip install autonomous-agent-algos[postgres]` |
+| `PostgresEventStore` | production system of record | `pip install autonomous-agent-architecture[postgres]` |
 | `RedisEventStore` | low-latency, ephemeral-ish logs | `[redis]`; durability = your Redis AOF settings |
 
 **Single process, restart safe** (`InProcessBus` + a durable store):
@@ -237,4 +238,4 @@ base URLs and headers follow vendor docs and are covered only by mocked-transpor
 
 ## License
 
-[MIT](https://github.com/innerkorehq/AutonomousAgentAlgos/blob/master/LICENSE) © 2026 Innerkore Technologies.
+[MIT](https://github.com/innerkorehq/AutonomousAgentArchitecture/blob/master/LICENSE) © 2026 Innerkore Technologies.

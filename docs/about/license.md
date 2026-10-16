@@ -1,6 +1,6 @@
 # License
 
-AutonomousAgentAlgos is released under the MIT License.
+AutonomousAgentArchitecture is released under the MIT License.
 
 ```text
 --8<-- "LICENSE"

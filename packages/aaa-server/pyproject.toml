@@ -18,7 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 requires-python = ">=3.11"
-dependencies = ["autonomous-agent-algos>=0.3.0", "starlette>=0.37", "uvicorn>=0.30"]
+dependencies = ["autonomous-agent-architecture>=0.3.1", "starlette>=0.37", "uvicorn>=0.30"]
 
 [project.optional-dependencies]
 jwt = ["pyjwt[crypto]>=2.8"]
@@ -28,13 +28,13 @@ redis = ["redis>=5.0"]
 aaa-server = "aaa_server.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
-Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/server/"
-Source = "https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/packages/aaa-server"
-Library = "https://pypi.org/project/autonomous-agent-algos/"
-Changelog = "https://innerkorehq.github.io/AutonomousAgentAlgos/about/changelog/"
-"Threat model" = "https://innerkorehq.github.io/AutonomousAgentAlgos/security/server/"
-Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
+Homepage = "https://github.com/innerkorehq/AutonomousAgentArchitecture"
+Documentation = "https://innerkorehq.github.io/AutonomousAgentArchitecture/server/"
+Source = "https://github.com/innerkorehq/AutonomousAgentArchitecture/tree/master/packages/aaa-server"
+Library = "https://pypi.org/project/autonomous-agent-architecture/"
+Changelog = "https://innerkorehq.github.io/AutonomousAgentArchitecture/about/changelog/"
+"Threat model" = "https://innerkorehq.github.io/AutonomousAgentArchitecture/security/server/"
+Issues = "https://github.com/innerkorehq/AutonomousAgentArchitecture/issues"
 
 [build-system]
 requires = ["hatchling>=1.27,<1.32"]
@@ -44,4 +44,4 @@ build-backend = "hatchling.build"
 packages = ["src/aaa_server"]
 
 [tool.uv.sources]
-autonomous-agent-algos = { workspace = true }
+autonomous-agent-architecture = { workspace = true }

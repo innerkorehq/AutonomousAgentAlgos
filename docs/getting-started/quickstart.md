@@ -1,7 +1,7 @@
 # Quickstart
 
 This page builds an agent in four steps. Every snippet is a real file from the repository's
-[`examples/`](https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/examples) folder and is executed by
+[`examples/`](https://github.com/innerkorehq/AutonomousAgentArchitecture/tree/master/examples) folder and is executed by
 the test suite.
 
 ## 1. A tool and a model

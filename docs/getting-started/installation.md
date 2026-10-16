@@ -5,8 +5,8 @@ AAA requires **Python 3.11 or newer** and is fully asynchronous (`asyncio`).
 ## From PyPI
 
 ```bash
-pip install autonomous-agent-algos            # or: uv add autonomous-agent-algos
-pip install "autonomous-agent-algos[postgres,redis,mcp]"   # with optional extras (table below)
+pip install autonomous-agent-architecture            # or: uv add autonomous-agent-architecture
+pip install "autonomous-agent-architecture[postgres,redis,mcp]"   # with optional extras (table below)
 ```
 
 ## From source
@@ -16,15 +16,15 @@ To work on the library itself, install from the repository:
 === "uv"
 
     ```bash
-    git clone https://github.com/innerkorehq/AutonomousAgentAlgos.git
-    cd AutonomousAgentAlgos
+    git clone https://github.com/innerkorehq/AutonomousAgentArchitecture.git
+    cd AutonomousAgentArchitecture
     uv sync
     ```
 
 === "pip"
 
     ```bash
-    pip install "git+https://github.com/innerkorehq/AutonomousAgentAlgos.git"
+    pip install "git+https://github.com/innerkorehq/AutonomousAgentArchitecture.git"
     ```
 
 The core depends only on `pydantic`, `anyio` and `httpx`. Everything else is an optional extra:
@@ -42,7 +42,7 @@ The core depends only on `pydantic`, `anyio` and `httpx`. Everything else is an 
 | `docs` | `mkdocs`, `mkdocs-material`, `mkdocstrings` | building this documentation |
 
 ```bash
-pip install "autonomous-agent-algos[postgres,redis] @ git+https://github.com/innerkorehq/AutonomousAgentAlgos.git"
+pip install "autonomous-agent-architecture[postgres,redis] @ git+https://github.com/innerkorehq/AutonomousAgentArchitecture.git"
 ```
 
 SQLite persistence uses only the standard library, so it needs no extra.
