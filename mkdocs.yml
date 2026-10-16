@@ -154,6 +154,7 @@ nav:
       - Status and limitations: about/limitations.md
       - Stability and deprecation: policy/stability.md
       - Design decisions: about/design-decisions.md
+      - Built with AAA: about/built-with-aaa.md
       - Contributing: about/contributing.md
       - Changelog: about/changelog.md
       - License: about/license.md

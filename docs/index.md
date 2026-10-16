@@ -160,5 +160,6 @@ success - 17 x 23 = 391
    [clusters](guides/clusters.md) if you are deploying.
 4. Need an API in front of it? See the [`aaa-server` overview](server/index.md).
 5. Keep the [event catalog](reference/event-catalog.md) and [configuration reference](operations/configuration.md) open while you build.
+6. See a real project built on it: [Built with AAA](about/built-with-aaa.md).
 
 AAA is MIT licensed. Source: [github.com/innerkorehq/AutonomousAgentArchitecture](https://github.com/innerkorehq/AutonomousAgentArchitecture).
