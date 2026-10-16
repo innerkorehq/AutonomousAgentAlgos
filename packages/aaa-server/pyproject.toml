@@ -37,7 +37,7 @@ Changelog = "https://innerkorehq.github.io/AutonomousAgentArchitecture/about/cha
 Issues = "https://github.com/innerkorehq/AutonomousAgentArchitecture/issues"
 
 [build-system]
-requires = ["hatchling>=1.27,<1.32"]
+requires = ["hatchling>=1.27,<1.33"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
