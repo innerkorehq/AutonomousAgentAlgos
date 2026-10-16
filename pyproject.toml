@@ -61,6 +61,7 @@ aaa = "aaa.cli:main"
 Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
 Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/"
 Source = "https://github.com/innerkorehq/AutonomousAgentAlgos"
+Server = "https://pypi.org/project/aaa-server/"
 Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
 
 [dependency-groups]

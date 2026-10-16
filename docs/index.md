@@ -5,7 +5,7 @@
 AAA is for the part of an agent system that is *not* the model: the loops, plans, routing, retries, budgets,
 approvals, persistence and recovery that decide whether an agent is a demo or something you can put on call.
 It gives you ready-made algorithms (tool loops, ReAct, plan-and-execute, routers, supervisors, generate-test-repair,
-workflows, state machines, RAG, voting) and the runtime that makes them durable, bounded and observable.
+workflows, state machines, RAG, voting, Reflexion, debate, swarm handoffs, tree-of-thoughts) and the runtime that makes them durable, bounded and observable.
 
 ```python
 --8<-- "examples/quickstart.py"
@@ -61,6 +61,46 @@ success - 17 x 23 = 391
 
 </div>
 
+## What is in 0.3
+
+<div class="grid cards" markdown>
+
+-   **More than text**
+
+    Images, audio and files in messages, offloaded to a blob store; native Anthropic and Gemini clients.
+    [:octicons-arrow-right-24: Multimodal](guides/multimodal.md) · [LLM gateways](guides/llm-gateways.md)
+
+-   **Retrieval**
+
+    Hybrid (similarity + keyword) search on pgvector, sqlite-vec and in memory; incremental document ingestion; Voyage reranking.
+    [:octicons-arrow-right-24: Vector stores](guides/vector-stores.md) · [Ingestion](guides/ingestion.md)
+
+-   **Tools that are safe to hand a model**
+
+    An SSRF-hardened fetch tool, confined file access, web search, and a Docker code sandbox that needs human approval by default.
+    [:octicons-arrow-right-24: Built-in tools](guides/builtin-tools.md)
+
+-   **MCP both ways**
+
+    Use any MCP server's tools, or serve yours to any MCP client with approval-gated tools hidden by default.
+    [:octicons-arrow-right-24: MCP](guides/mcp.md)
+
+-   **Evals that reach production**
+
+    Scores delivered to Langfuse, Phoenix and LangSmith; datasets from real traces; red-team suites; simulated users.
+    [:octicons-arrow-right-24: Evaluating agents](guides/evals.md)
+
+-   **Run it for real**
+
+    Backup and restore with a consistency check, measured throughput, a container image, an upgrade guide.
+    [:octicons-arrow-right-24: Backup](operations/backup-restore.md) · [Upgrading](operations/upgrading.md)
+
+</div>
+
+!!! tip "Want an HTTP API?"
+    The separate **[`aaa-server`](server/index.md)** package puts an engine behind a port: authentication, tenant isolation, rate limits and quotas, approvals over HTTP, resumable event streams, MCP and A2A endpoints.
+    `pip install aaa-server` · [overview and docs](server/index.md) · [PyPI](https://pypi.org/project/aaa-server/)
+
 ## The algorithms
 
 | Algorithm | Use it when |
@@ -76,6 +116,10 @@ success - 17 x 23 = 391
 | [`FSM`](guides/algorithms/workflow-fsm.md) | Long-lived, event-driven processes with explicit states (approvals, onboarding). |
 | [`SelfConsistency`](guides/algorithms/ensembles-rag.md) | Answers are exactly comparable; majority vote beats one sample. |
 | [`RAGAgent`](guides/algorithms/ensembles-rag.md) | Answers must be grounded in your documents, with citations. |
+| [`Reflexion`](guides/algorithms/reasoning.md) | Retry from scratch, informed by written lessons from the failed attempts. |
+| [`Debate`](guides/algorithms/reasoning.md) | Several answers that read each other's, then a judge or a vote. |
+| [`Swarm`](guides/algorithms/reasoning.md) | Specialist agents hand a conversation to each other, each with only its own tools. |
+| [`TreeOfThoughts`](guides/algorithms/reasoning.md) | Search over reasoning steps, scored and pruned, within a hard call budget. |
 
 [Choosing an algorithm](guides/algorithms/index.md) walks through the decision, and
 [Writing your own](guides/algorithms/custom.md) shows the 40-line recipe for a new one.
@@ -91,8 +135,8 @@ success - 17 x 23 = 391
     - **Not yet verified live** against any hosted gateway (Portkey, Cloudflare, Vercel, Bifrost, Kong, MLflow,
       LiteLLM proxy). Their URLs and headers follow vendor documentation and are covered by mocked-transport
       tests. A [smoke-test script](about/limitations.md#verify-a-hosted-gateway-yourself) is provided.
-    - **Not load tested.** Correctness under failure is tested; throughput numbers are only given for the
-      single-process log-growth benchmark.
+    - **Lightly load tested.** Correctness under failure is tested; throughput is [measured](operations/performance.md#measured-throughput)
+      for one laptop (workers sharing its cores), not for a real multi-machine deployment.
 
     The full list is on [Status and limitations](about/limitations.md).
 
@@ -102,6 +146,7 @@ success - 17 x 23 = 391
 2. Read [the mental model](getting-started/mental-model.md) (ten minutes; everything else follows from it).
 3. Pick an [algorithm](guides/algorithms/index.md), or go straight to [persistence](guides/persistence.md) and
    [clusters](guides/clusters.md) if you are deploying.
-4. Keep the [event catalog](reference/event-catalog.md) and [configuration reference](operations/configuration.md) open while you build.
+4. Need an API in front of it? See the [`aaa-server` overview](server/index.md).
+5. Keep the [event catalog](reference/event-catalog.md) and [configuration reference](operations/configuration.md) open while you build.
 
 AAA is MIT licensed. Source: [github.com/innerkorehq/AutonomousAgentAlgos](https://github.com/innerkorehq/AutonomousAgentAlgos).

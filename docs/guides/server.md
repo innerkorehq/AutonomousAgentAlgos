@@ -1,5 +1,8 @@
 # The HTTP server (`aaa-server`)
 
+!!! info "Part of `aaa-server`"
+    This page documents **`aaa-server`**, the HTTP server package ([`pip install aaa-server`](https://pypi.org/project/aaa-server/)). Start at the [server overview](../server/index.md); the library docs begin at the [AAA home](../index.md).
+
 `aaa-server` puts an engine behind a network port: bearer authentication, tenant isolation, rate limits, quotas, server-side budgets, human approvals over HTTP, and live event streams (SSE). It is
 a **separate package** (`pip install aaa-server`, extras `jwt` and `redis`) so the library stays free of web dependencies; it releases on its own schedule. The design is argued, threat by threat, on
 the [server threat-model page](../security/server.md).

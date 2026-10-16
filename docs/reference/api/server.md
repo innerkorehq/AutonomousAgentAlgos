@@ -1,6 +1,6 @@
 # `aaa_server`
 
-Package `aaa-server`; see [the guide](../../guides/server.md).
+Package [`aaa-server`](https://pypi.org/project/aaa-server/); see the [server overview](../../server/index.md) and [guide](../../guides/server.md). Library docs: [AAA home](../../index.md).
 
 ::: aaa_server.ServerConfig
 

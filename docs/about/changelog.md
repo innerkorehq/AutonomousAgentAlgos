@@ -1,5 +1,9 @@
 # Changelog
 
+## aaa-server 0.1.0 (2026-10-16)
+
+First release of the separate [`aaa-server`](../server/index.md) package (it requires `autonomous-agent-algos>=0.3.0`). Everything in the "HTTP server" and "MCP server and A2A" entries under 0.3.0 below ships here, plus: `POST /mcp` and the experimental A2A endpoint, the `Dockerfile`/`compose.yaml` deployment, and the fix that builds an `async` factory inside the server's own event loop.
+
 ## 0.3.0 (2026-10-16)
 
 A large release: everything below is additive to the 0.2 API and log format (see [Upgrading](../operations/upgrading.md)).

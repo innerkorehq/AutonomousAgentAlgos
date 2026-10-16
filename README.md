@@ -7,6 +7,7 @@ Async, **event-driven** library of production-deployable agent algorithms that r
 algorithm, clustering, the tool execution guard, operations, security, API reference, and an honest
 [status and limitations](https://innerkorehq.github.io/AutonomousAgentAlgos/about/limitations/) page.
 The README below is a condensed overview; the docs are the reference.
+**HTTP server:** the separate [`aaa-server`](https://pypi.org/project/aaa-server/) package ([docs](https://innerkorehq.github.io/AutonomousAgentAlgos/server/)).
 
 ```python
 async with Engine() as eng:
@@ -31,8 +32,9 @@ async with Engine() as eng:
    budget_exceeded / invalid_input / cancelled / failed.
 5. **Safety lives outside the model**: budgets, deadlines, approval gates, and idempotency are
    enforced by the Engine/ToolHandler, not by prompts.
-6. **Ordering**: each algorithm sees its events serially in log order; delivery is in-process
-   at-most-once (distributed at-least-once adapters are future work).
+6. **Ordering**: each algorithm sees its events serially in log order. In one process delivery is
+   at-most-once; with a Postgres or Redis store and the distributed bus it is at-least-once with
+   idempotent, deterministic event ids, so a redelivery is absorbed rather than duplicated.
 7. **Durable and crash-resumable.** `SQLiteEventStore` (stdlib, WAL, atomic OCC append,
    idempotent on event id) persists the log. After a crash, `engine.recover([...algorithms])`
    rebuilds budgets, spend and deadlines from the log, then redelivers events nothing reacted to.
@@ -44,9 +46,9 @@ async with Engine() as eng:
 (any worker records the reply), is namespaced per tenant, budgeted as a whole, streamable, and erasable. With an `openai_responses` client the provider holds the conversation,
 so each turn sends only what is new.
 
-## HTTP server
-`pip install aaa-server` puts an engine behind a port: bearer auth (API keys or JWT/JWKS), tenants taken only from the credential, rate limits and event-sourced quotas, server-side budgets,
-tool approvals over HTTP and resumable SSE event streams. `aaa-server serve myapp.server:build` listens on loopback by default. See the [server guide](docs/guides/server.md).
+## HTTP server (separate package)
+[`pip install aaa-server`](https://pypi.org/project/aaa-server/) puts an engine behind a port: bearer auth (API keys or JWT/JWKS), tenants taken only from the credential, rate limits and event-sourced quotas, server-side budgets,
+tool approvals over HTTP and resumable SSE event streams. `aaa-server serve myapp.server:build` listens on loopback by default. See the [`aaa-server` docs](https://innerkorehq.github.io/AutonomousAgentAlgos/server/).
 
 ## MCP and context management
 `aaa.mcp.MCPClient` connects to any MCP server (stdio, HTTP, or your own session; mcp SDK 1.x and 2.x) and turns its tools into guarded AAA tools,

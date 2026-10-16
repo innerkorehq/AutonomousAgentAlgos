@@ -1,5 +1,8 @@
 # Threat model: the HTTP server (`aaa-server`)
 
+!!! info "Part of `aaa-server`"
+    This page documents **`aaa-server`**, the HTTP server package ([`pip install aaa-server`](https://pypi.org/project/aaa-server/)). Start at the [server overview](../server/index.md); the library docs begin at the [AAA home](../index.md).
+
 Written before the code (milestone M6). The server puts an engine behind a network port. The engine already isolates tenants (`TenantScope`), validates tool arguments, enforces budgets
 and asks for approval; the server's job is to make sure **only the right caller reaches those mechanisms, as the right tenant, and cannot use the port to hurt the host or other tenants.**
 

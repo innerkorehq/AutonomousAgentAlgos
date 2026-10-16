@@ -38,7 +38,7 @@ The core depends only on `pydantic`, `anyio` and `httpx`. Everything else is an 
 | `mcp` | `mcp` | `MCPClient`: use any MCP server's tools ([MCP](../guides/mcp.md)) |
 | `graphiti` | `graphiti-core` | `GraphitiMemory` (also needs Neo4j, FalkorDB or Neptune) |
 | `langgraph` / `langmem` | `langgraph` / `langmem` | `LangGraphStoreMemory`, and LangMem's tools and managers on the same store |
-| *(separate package)* `aaa-server` | `aaa-server` (extras `jwt`, `redis`) | the [HTTP server](../guides/server.md): `pip install "aaa-server[jwt,redis]"` |
+| *(separate package)* `aaa-server` | `aaa-server` (extras `jwt`, `redis`) | the [HTTP server](../server/index.md) ([PyPI](https://pypi.org/project/aaa-server/)): `pip install "aaa-server[jwt,redis]"` |
 | `docs` | `mkdocs`, `mkdocs-material`, `mkdocstrings` | building this documentation |
 
 ```bash

@@ -8,19 +8,29 @@ whether it fits your use.
 | Claim | Evidence |
 |---|---|
 | Type-correct public API | `pyright` (basic mode) reports 0 errors over the library, the examples and the scripts, in CI. The tests are not type-checked. |
-| Core engine, algorithms, tools, projections, snapshots | Unit and integration tests (280+); every doc example is executed by the suite. |
+| Core engine, algorithms, tools, projections, snapshots | About 1,100 tests; every doc example is executed by the suite. |
 | Four event stores obey one contract | One parametrized contract suite runs against memory, SQLite, Postgres and Redis (real servers, started on random ports). |
 | Distributed bus: ordering, exactly-once competing consumers, broadcast, failover, rebalancing, durable ack | The same bus scenarios run against memory, Postgres and Redis backends. |
 | Crash safety | Tests that `SIGKILL` real worker processes, including **mid-tool-call**, on Postgres and Redis, for both delivery policies. |
 | Live LLM interaction | `scripts/live_smoke.py` passed 11/11 applicable checks against a **local Ollama** (`gemma4:latest`, 8B): completion, streaming, structured output, native and streamed tool calls, a full `ToolLoop`, `PlanAndExecute` with a real planner, generate-test-repair, delta events, error mapping. |
 | Log growth is linear in turns | Benchmark in [Performance](../operations/performance.md). |
+| Old logs still fold | Frozen v0.2.0 logs for every built-in event type are replayed through every current projection in CI. |
+| Native Anthropic and Gemini clients | Request/response shapes checked against the vendors' own SDK types; mocked transports only (nothing live). |
+| SSRF defences and the code sandbox | Table-driven SSRF tests with a fake resolver; the Docker sandbox against real Docker (no network, memory/pid/time/output limits); SearXNG search against a real instance. |
+| Hybrid search and ingestion | One contract run against in-memory, pgvector, sqlite-vec, Qdrant, LanceDB, Chroma and Pinecone Local (real servers or emulators). |
+| Server, MCP and A2A | In-process ASGI tests (cross-tenant matrix, spoofing, JWT attacks, quota races), a real uvicorn socket, the official `mcp` (1.x and 2.x) and `a2a-sdk` clients. |
+| Score delivery | Real Langfuse 2.x and Phoenix servers in CI; LangSmith by mocked transport only. |
+| Backup and restore | A Postgres `pg_dump`/`pg_restore` round trip checked by `aaa store verify`. |
 
 ## What has **not** been verified
 
 - **Hosted gateways.** Portkey, Cloudflare AI Gateway, Vercel AI Gateway, Bifrost, Kong AI Gateway, MLflow AI Gateway and the LiteLLM proxy
   are supported through documented URLs and headers and **mocked-transport tests only**. Bifrost's and MLflow's base paths vary by version.
   The LiteLLM SDK adapter has not been exercised live. OpenAI's strict structured-output mode has not been tested (a local Ollama may be more lenient).
-- **Throughput.** Nothing has been load tested. Correctness under failure is tested; capacity and latency under load are not.
+- **Throughput at scale.** Throughput is [measured](../operations/performance.md#measured-throughput) on one laptop with the workers sharing its cores. Nothing has been tested across machines, under sustained load, or with thousands of concurrent streams.
+- **New surfaces against real providers and hosts:** the Anthropic and Gemini clients, Claude Desktop or other MCP hosts, and A2A peers other than the official SDK client. A2A is experimental.
+- **Langfuse 4 and LangSmith** score delivery; **WAL/PITR and Redis restores**; **a real identity provider** for JWT; **TLS and proxy deployments** of the server.
+- **Whether the reasoning algorithms (Reflexion, Debate, Swarm, Tree-of-thoughts) improve answers with real models.** They are tested with scripted models for behaviour and bounds, not for quality.
 - **Algorithms against a real model:** `ReAct`, `Router`, `Supervisor`, `SelfConsistency`, `GeneratorCritic` and `RAGAgent` are tested with scripted models,
   not live ones.
 - **Redis Cluster** (the key layout is cluster-safe by design; only a single node was tested) and **managed Postgres/Redis failover**.

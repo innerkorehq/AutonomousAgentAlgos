@@ -1,6 +1,6 @@
 [project]
 name = "aaa-server"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "HTTP/SSE server for AAA agents: authentication, tenant isolation, rate limits, quotas, approvals."
 readme = "README.md"
 license = "MIT"
@@ -18,7 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 requires-python = ">=3.11"
-dependencies = ["autonomous-agent-algos>=0.3.0.dev0", "starlette>=0.37", "uvicorn>=0.30"]
+dependencies = ["autonomous-agent-algos>=0.3.0", "starlette>=0.37", "uvicorn>=0.30"]
 
 [project.optional-dependencies]
 jwt = ["pyjwt[crypto]>=2.8"]
@@ -29,8 +29,11 @@ aaa-server = "aaa_server.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/innerkorehq/AutonomousAgentAlgos"
-Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/guides/server/"
+Documentation = "https://innerkorehq.github.io/AutonomousAgentAlgos/server/"
 Source = "https://github.com/innerkorehq/AutonomousAgentAlgos/tree/master/packages/aaa-server"
+Library = "https://pypi.org/project/autonomous-agent-algos/"
+Changelog = "https://innerkorehq.github.io/AutonomousAgentAlgos/about/changelog/"
+"Threat model" = "https://innerkorehq.github.io/AutonomousAgentAlgos/security/server/"
 Issues = "https://github.com/innerkorehq/AutonomousAgentAlgos/issues"
 
 [build-system]

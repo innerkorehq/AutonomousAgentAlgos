@@ -11,6 +11,7 @@ on:
       - "docs/**"
       - "examples/**"
       - "src/**"
+      - "packages/**"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "uv.lock"

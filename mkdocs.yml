@@ -83,7 +83,6 @@ nav:
       - Images, audio and files: guides/multimodal.md
       - Built-in tools and the code sandbox: guides/builtin-tools.md
       - MCP servers: guides/mcp.md
-      - The HTTP server: guides/server.md
       - Human approval: guides/human-approval.md
       - Streaming: guides/streaming.md
       - Algorithms:
@@ -112,6 +111,11 @@ nav:
       - Evolving events and stores: guides/evolving-events.md
       - Testing your agents: guides/testing.md
       - Extending AAA: guides/extending.md
+  - Server (aaa-server):
+      - Overview: server/index.md
+      - Server guide: guides/server.md
+      - Threat model: security/server.md
+      - API reference: reference/api/server.md
   - Operations:
       - Deployment checklist: operations/deployment.md
       - Configuration reference: operations/configuration.md
@@ -141,14 +145,12 @@ nav:
           - Ingestion: reference/api/ingest.md
           - Built-in tools: reference/api/builtin-tools.md
           - Sandbox: reference/api/sandbox.md
-          - Server: reference/api/server.md
           - Command line: reference/api/cli.md
           - Events: reference/api/events.md
           - Validation and core: reference/api/core.md
   - About:
       - Multimodal threat model: security/multimodal.md
       - Tools and sandbox threat model: security/tools.md
-      - Server threat model: security/server.md
       - Status and limitations: about/limitations.md
       - Stability and deprecation: policy/stability.md
       - Design decisions: about/design-decisions.md
