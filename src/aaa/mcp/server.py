@@ -190,7 +190,11 @@ class MCPToolServer:
 # -- binding to the official SDK ---------------------------------------------------------------
 def build_server(core: MCPToolServer) -> Any:
     """An SDK server object (low-level `Server`) exposing `core`. Works with mcp 1.x and 2.x."""
-    try:  # mcp >= 2
+    import mcp
+
+    if hasattr(
+        mcp, "Client"
+    ):  # mcp >= 2 (not "can mcp_types be imported": it can outlive a downgrade to 1.x)
         import mcp_types as types
         from mcp.server.lowlevel import Server
 
@@ -207,8 +211,6 @@ def build_server(core: MCPToolServer) -> Any:
             )
 
         return Server(core.name, on_list_tools=on_list, on_call_tool=on_call)
-    except ImportError:
-        pass
     from mcp import types  # mcp 1.x
     from mcp.server.lowlevel import Server
 
