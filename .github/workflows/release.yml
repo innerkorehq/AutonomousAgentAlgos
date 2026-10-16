@@ -50,7 +50,7 @@ jobs:
           uv pip install --python /tmp/smoke/bin/python dist/*.whl
           /tmp/smoke/bin/python -I examples/quickstart.py | grep -q "success - 17 x 23 = 391"
           /tmp/smoke/bin/python -I -c "import aaa; print('aaa', aaa.__version__)"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
