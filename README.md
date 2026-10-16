@@ -1,6 +1,16 @@
-# Autonomous Agent Architecture (AAA)
+<div align="center">
 
-**Autonomous Agent Architecture (AAA)**: an async, **event-driven** architecture for production agents. The
+# AAA
+
+## Autonomous Agent Architecture
+
+**The architecture and runtime for autonomous agents.**
+
+Build · Orchestrate · Execute · Recover · Manage
+
+</div>
+
+AAA is an async, **event-driven** architecture for production agents. The
 algorithms, the durable runtime, tools, memory, evals and guardrails, over **arbitrary user data**, with a
 pluggable LLM gateway layer. (`pip install autonomous-agent-architecture`, `import aaa`.)
 

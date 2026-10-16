@@ -1,5 +1,5 @@
 site_name: Autonomous Agent Architecture (AAA)
-site_description: "Autonomous Agent Architecture (AAA), an async, event-driven architecture for production agents, with a pluggable LLM gateway layer."
+site_description: "AAA, Autonomous Agent Architecture: the architecture and runtime for autonomous agents. Build, orchestrate, execute, recover, manage."
 site_url: https://innerkorehq.github.io/AutonomousAgentArchitecture/
 repo_url: https://github.com/innerkorehq/AutonomousAgentArchitecture
 repo_name: innerkorehq/AutonomousAgentArchitecture

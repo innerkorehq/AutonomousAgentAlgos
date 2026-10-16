@@ -1,4 +1,14 @@
-# Autonomous Agent Architecture (AAA)
+<div align="center" markdown>
+
+# AAA
+
+## Autonomous Agent Architecture
+
+**The architecture and runtime for autonomous agents.**
+
+Build · Orchestrate · Execute · Recover · Manage
+
+</div>
 
 **An async, event-driven architecture for production agents: the algorithms, the durable runtime, tools, memory, evals and guardrails, over data of any shape, with any LLM gateway.**
 

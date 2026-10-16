@@ -2,7 +2,7 @@
 
 **An HTTP/SSE server for AAA agents**: bearer authentication, tenants taken only from the credential, rate limits and quotas, server-side budgets, human approvals over HTTP, resumable event streams, MCP and (experimental) A2A endpoints.
 
-`aaa-server` is a **separate package** from the [AAA library](../index.md): the library has no web dependencies, and the server releases on its own schedule.
+`aaa-server` is a **separate package** from the [AAA library](../index.md) (Autonomous Agent Architecture): the library has no web dependencies, and the server releases on its own schedule.
 
 [![PyPI](https://img.shields.io/pypi/v/aaa-server)](https://pypi.org/project/aaa-server/) &nbsp; Library: [`autonomous-agent-architecture`](https://pypi.org/project/autonomous-agent-architecture/) · [docs home](../index.md)
 

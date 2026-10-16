@@ -1,5 +1,7 @@
 # aaa-server
 
+*Part of **AAA, Autonomous Agent Architecture**: the architecture and runtime for autonomous agents. Build · Orchestrate · Execute · Recover · Manage.*
+
 HTTP/SSE server for [AAA](https://github.com/innerkorehq/AutonomousAgentArchitecture) agents ([`autonomous-agent-architecture`](https://pypi.org/project/autonomous-agent-architecture/)): bearer authentication, tenants taken only from the credential, rate limits and quotas, server-side budgets, human approvals over HTTP, resumable event streams, plus MCP and (experimental) A2A endpoints.
 
 **Documentation:** [overview](https://innerkorehq.github.io/AutonomousAgentArchitecture/server/) · [server guide](https://innerkorehq.github.io/AutonomousAgentArchitecture/guides/server/) · [threat model](https://innerkorehq.github.io/AutonomousAgentArchitecture/security/server/) · [API reference](https://innerkorehq.github.io/AutonomousAgentArchitecture/reference/api/server/) · [library docs](https://innerkorehq.github.io/AutonomousAgentArchitecture/) · [changelog](https://innerkorehq.github.io/AutonomousAgentArchitecture/about/changelog/)
