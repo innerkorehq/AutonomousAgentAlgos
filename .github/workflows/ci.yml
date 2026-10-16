@@ -352,6 +352,30 @@ jobs:
       - name: Score delivery tests
         run: uv run pytest -v -p no:cacheprovider tests/unit/test_eval_m9.py
 
+  container:
+    # The image builds, runs as a non-root user next to Postgres, and serves an authenticated run end to end.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack
+        run: |
+          export AAA_API_KEY=ci-key-$(openssl rand -hex 8)
+          echo "AAA_API_KEY=$AAA_API_KEY" >> "$GITHUB_ENV"
+          docker compose up -d --build
+          for i in $(seq 1 40); do curl -sf localhost:8000/healthz && break; sleep 3; done
+      - name: A run completes and unauthenticated calls are refused
+        run: |
+          set -e
+          R=$(curl -sf -X POST localhost:8000/v1/runs -H "Authorization: Bearer $AAA_API_KEY" -H 'Content-Type: application/json' -d '{"algo":"agent","input":{"task":"hi"}}' | python3 -c "import json,sys; print(json.load(sys.stdin)['run_id'])")
+          sleep 3
+          curl -sf localhost:8000/v1/runs/$R -H "Authorization: Bearer $AAA_API_KEY" | grep -q '"status":"completed"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/v1/runs)" = 401
+          test "$(docker compose exec -T server id -u)" = 10001
+      - if: failure()
+        run: docker compose logs
+      - run: docker compose down -v
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

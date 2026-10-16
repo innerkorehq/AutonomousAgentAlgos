@@ -53,7 +53,24 @@ ship metrics (counters and histograms). The event log is the audit trail and the
 - **Logs**: the library logs under `aaa.*` (`aaa.engine`, `aaa.bus`, `aaa.dbus`, `aaa.recovery`, `aaa.projection`, `aaa.postgres`). Handler exceptions
   are logged with tracebacks and also surface as failed runs.
 
-## 5. Upgrades
+## 5. Containers
+
+The repository's `Dockerfile` builds the library and `aaa-server` into a slim image that runs as an unprivileged user (uid 10001) with a health check; `compose.yaml` runs it with Postgres on a laptop or single host:
+
+```bash
+AAA_API_KEY=$(openssl rand -hex 24) docker compose up --build
+curl -s localhost:8000/healthz
+```
+
+`deploy/app.py` is the server configuration the image runs (Postgres store from `AAA_DATABASE_URL`, API keys from `AAA_API_KEYS`, a canned demo model): copy it and wire your own model and tools. The compose file publishes the
+port on loopback only and drops all capabilities; put a TLS-terminating reverse proxy in front before exposing it. There is **no Helm chart**: it could not be verified without a cluster, so only these container files
+are supported. A Kubernetes deployment needs the same things the compose file shows: the env vars, a Postgres, a `/healthz` probe, and one replica or many (workers coordinate through the store).
+
+## 6. Upgrades and backups
+
+See [Upgrading](upgrading.md) and [Backup and restore](backup-restore.md).
+
+## 7. Upgrade notes
 
 - **Projections** are versioned. A release that changes one bumps its `version`, which makes old snapshots be ignored and
   rebuilt from the log automatically. No migration step.

@@ -1,6 +1,7 @@
 """`aaa`: read-only commands for looking at a durable event store from a shell.
 
     aaa store check sqlite:///agent.db     open the store (bringing an old layout forward) and report on it
+    aaa store verify sqlite:///agent.db    check every run's log is consistent (use after a restore; --blobs DIR [--deep])
     aaa runs sqlite:///agent.db            one line per run
     aaa events sqlite:///agent.db RUN_ID   the run's events, in order
     aaa mcp serve mymodule:build           serve a ToolRegistry / MCPToolServer over MCP stdio (extra `mcp`)
@@ -56,6 +57,29 @@ async def _check(url: str) -> int:
         return 0
     finally:
         await store.aclose()
+
+
+async def _verify(url: str, blobs: str | None, deep: bool) -> int:
+    from aaa.data.blob import FileBlobStore
+    from aaa.events.verify import verify_store
+
+    store = await open_store(url)
+    try:
+        rep = await verify_store(store, FileBlobStore(blobs) if blobs else None, deep=deep)
+    finally:
+        await store.aclose()
+    print(
+        f"runs: {rep.runs} ({rep.open_runs} open); events: {rep.events}; blobs checked: {rep.blobs_checked}"
+    )
+    print(
+        f"newest event: {rep.newest_event:%Y-%m-%dT%H:%M:%SZ}"
+        if rep.newest_event
+        else "newest event: (none)"
+    )
+    for p in rep.problems:
+        print(f"PROBLEM: {p}")
+    print("ok" if rep.ok else f"{len(rep.problems)} problem(s) found")
+    return 0 if rep.ok else 1
 
 
 async def _runs(url: str, open_only: bool) -> int:
@@ -119,6 +143,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     st = sub.add_parser("store", help="store maintenance").add_subparsers(dest="sub", required=True)
     st.add_parser("check", help="open the store and report").add_argument("url")
+    vf = st.add_parser("verify", help="check every run's log is consistent (after a restore)")
+    vf.add_argument("url")
+    vf.add_argument("--blobs", help="a FileBlobStore directory whose blobs the events refer to")
+    vf.add_argument("--deep", action="store_true", help="also re-hash every blob")
     rn = sub.add_parser("runs", help="list runs")
     rn.add_argument("url")
     rn.add_argument("--open", action="store_true", help="only runs that have not finished")
@@ -135,6 +163,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if a.cmd == "mcp":
             return asyncio.run(_mcp_serve(a.factory))
         if a.cmd == "store":
+            if a.sub == "verify":
+                return asyncio.run(_verify(a.url, a.blobs, a.deep))
             return asyncio.run(_check(a.url))
         if a.cmd == "runs":
             return asyncio.run(_runs(a.url, a.open))

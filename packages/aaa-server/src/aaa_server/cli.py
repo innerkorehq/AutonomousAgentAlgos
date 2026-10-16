@@ -11,27 +11,69 @@ import asyncio
 import importlib
 import inspect
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from .app import ServerConfig, create_app
 
 
-def load_config(spec: str) -> ServerConfig:
+def load_factory(spec: str) -> Callable[[], Any]:
     module, _, attr = spec.partition(":")
     if not module or not attr:
         raise SystemExit("expected module:factory, e.g. myapp.server:build")
     sys.path.insert(0, "")
     fn = getattr(importlib.import_module(module), attr)
-    cfg = fn() if callable(fn) else fn
+    return fn if callable(fn) else (lambda: fn)
+
+
+async def _build(factory: Callable[[], Any]) -> ServerConfig:
+    cfg = factory()
     if inspect.isawaitable(cfg):
-        cfg = asyncio.run(_await(cfg))
+        cfg = await cfg
     if not isinstance(cfg, ServerConfig):
-        raise SystemExit(f"{spec} must return a ServerConfig, got {type(cfg).__name__}")
+        raise SystemExit(f"the factory must return a ServerConfig, got {type(cfg).__name__}")
     return cfg
 
 
-async def _await(x):  # pragma: no cover - trivial
-    return await x
+def load_config(spec: str) -> ServerConfig:
+    """Build the configuration now (for tests and sync code). The server itself builds it inside its own event loop."""
+    return asyncio.run(_build(load_factory(spec)))
+
+
+class LazyApp:
+    """An ASGI app that builds the configuration INSIDE the server's event loop, at startup. A factory that opens connection
+    pools (asyncpg, redis) must run in the loop that will use them, which `asyncio.run(factory())` before `uvicorn.run` is not."""
+
+    def __init__(self, factory: Callable[[], Any]) -> None:
+        self.factory, self.app = factory, None
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "lifespan":
+            while True:
+                msg = await receive()
+                if msg["type"] == "lifespan.startup":
+                    try:
+                        cfg = await _build(self.factory)
+                        stack = cfg.engine
+                        await stack.__aenter__()
+                        self.app = create_app(cfg)
+                    except BaseException as e:  # noqa: BLE001 - report the failure to the server, which exits
+                        await send(
+                            {
+                                "type": "lifespan.startup.failed",
+                                "message": f"{type(e).__name__}: {e}",
+                            }
+                        )
+                        return
+                    await send({"type": "lifespan.startup.complete"})
+                elif msg["type"] == "lifespan.shutdown":
+                    await stack.__aexit__(None, None, None)
+                    await send({"type": "lifespan.shutdown.complete"})
+                    return
+        elif self.app is None:
+            raise RuntimeError("the server has not finished starting")
+        else:
+            await self.app(scope, receive, send)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -44,7 +86,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     a = ap.parse_args(argv)
     import uvicorn
 
-    app = create_app(load_config(a.factory), manage_engine=True)
+    app = LazyApp(load_factory(a.factory))
     if a.host not in ("127.0.0.1", "localhost", "::1"):
         print(
             f"warning: listening on {a.host}. Put TLS and a reverse proxy (body/header timeouts) in front; see the server guide.",

@@ -1,0 +1,27 @@
+# Postgres + aaa-server. For a laptop or a single host; see docs/operations/deployment.md before exposing it.
+#   AAA_API_KEY=$(openssl rand -hex 24) docker compose up --build
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aaa-dev-only}
+      POSTGRES_DB: aaa
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aaa"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  server:
+    build: .
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      AAA_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-aaa-dev-only}@db:5432/aaa
+      AAA_API_KEYS: '{"${AAA_API_KEY:?set AAA_API_KEY}": ["acme", "ann"]}'
+    ports: ["127.0.0.1:8000:8000"]   # loopback only; put a TLS-terminating proxy in front to expose it
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  dbdata:

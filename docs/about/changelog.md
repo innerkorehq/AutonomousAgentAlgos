@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+**Operations** (see [backup and restore](../operations/backup-restore.md), [upgrading](../operations/upgrading.md), [performance](../operations/performance.md), [deployment](../operations/deployment.md))
+
+- `aaa store verify <store> [--blobs DIR] [--deep]` / `aaa.events.verify.verify_store`: a read-only consistency check of every run's log and blob references, for after a restore. Verified on a restored Postgres dump.
+- `scripts/bench_cluster.py` and measured Redis/Postgres multi-worker throughput (with the connection-budget finding).
+- `Dockerfile`, `compose.yaml` and `deploy/app.py`: the server in a non-root container with Postgres; smoke-tested end to end. No Helm chart.
+- `RedisEventStore.create(max_connections=...)`: the pool now scales with the partition count; the redis-py 8 default of 100 starved a 16-partition worker (`Too many connections`).
+- **Fix (`aaa-server`)**: an `async` factory given to `aaa-server serve` was run in a throw-away event loop, so a connection pool it opened failed with "Event loop is closed" on the first request. The configuration is now built inside the server's own loop.
+
 **Evals** (see [the guide](../guides/evals.md))
 
 - Scores now reach the backends: `LangfuseSink`, `PhoenixSink`, `LangSmithSink` and `OTelSink` implement `score()` (`OnlineEvaluator` passes the run's span). Verified against real Langfuse 2.x and Phoenix servers; LangSmith by mock only.

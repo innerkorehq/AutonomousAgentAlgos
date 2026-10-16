@@ -33,6 +33,30 @@ Doubling the turns now doubles the totals. Snapshots complement this: for a 40-t
 call* grows with the conversation. Use provider prompt caching, trim or summarize old turns in your own algorithm, or move
 work into child runs with fresh context (`PlanAndExecute` does this naturally).
 
+## Measured throughput
+
+`scripts/bench_cluster.py` starts N full engines (each with its own store connections and bus) **in one process**, a client submits runs through a `ClientBus`, and every run is a tiny `ToolLoop` (a scripted model, one
+trivial tool call, about nine events). The model takes no time, so these numbers are the library's and the backend's overhead; a real model call (seconds) makes the backend irrelevant for latency and
+leaves only the per-run cost. 100 runs per row, at most 20 in flight, 16 partitions, one Apple M4 laptop (10 cores) running the client, all workers and the backend (Redis 8 natively, Postgres 16 in Docker with 2 CPUs).
+Workers share those cores, so **adding workers here shows coordination overhead, not the scale-out you would get from separate machines.**
+
+| Backend | Workers | Runs/s | p50 latency | p95 latency |
+|---|---|---|---|---|
+| Redis | 1 | 116 | 162 ms | 227 ms |
+| Redis | 2 | 96 | 193 ms | 287 ms |
+| Redis | 4 | 83 | 225 ms | 315 ms |
+| Postgres | 1 | 37 | 496 ms | 758 ms |
+| Postgres | 2 | 38 | 506 ms | 752 ms |
+| Postgres | 4 | 43 | 452 ms | 600 ms |
+
+Read it as: on one machine a Postgres-backed worker completes tens of trivial runs a second and a Redis-backed one around a hundred; neither is the bottleneck of an agent that waits on a model. Your numbers will
+differ: re-run the script against your own backend (`uv run python scripts/bench_cluster.py postgres $DSN 1 2 4`).
+
+**Connections are the first limit you hit.** Each worker's Postgres store holds a pool (10 by default), and every client waiting on a run's result holds a connection while it waits. With Postgres's default
+`max_connections=100`, four workers plus a client with 20 waiters already ran out (`too many clients already`, retried and logged). Budget connections as
+`(workers + clients) * pool size + concurrent waiters`, raise `max_connections` or put PgBouncer in front, and bound how many runs a client awaits at once. Redis clients are bounded by `max_connections` on the
+pool (see `RedisEventStore.create`): every consumer group blocks on each partition it owns.
+
 ## Where the time goes
 
 - Per event: one append (store latency), one bus hop, one projection load (snapshot + a few events).

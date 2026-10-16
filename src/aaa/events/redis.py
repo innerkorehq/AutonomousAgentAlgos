@@ -116,9 +116,22 @@ class RedisEventStore:
 
     @classmethod
     async def create(
-        cls, url: str, *, partitions: int = 16, prefix: str = "aaa", outbox: bool = True
+        cls,
+        url: str,
+        *,
+        partitions: int = 16,
+        prefix: str = "aaa",
+        outbox: bool = True,
+        max_connections: int | None = None,
     ) -> RedisEventStore:
-        r: Any = aioredis.from_url(url, decode_responses=False)
+        """`max_connections` bounds the client pool. Every consumer group blocks on each partition it owns, so a worker needs
+        roughly `groups * partitions` connections; the default (`max(100, 16 * partitions)`) covers the built-in groups plus
+        a few algorithms, and a deployment with many algorithms or partitions should raise it."""
+        r: Any = aioredis.from_url(
+            url,
+            decode_responses=False,
+            max_connections=max_connections or max(100, 16 * partitions),
+        )
         key = f"{prefix}:meta:partitions"
         await r.set(key, str(partitions), nx=True)
         have = int(await r.get(key))

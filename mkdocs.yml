@@ -116,6 +116,8 @@ nav:
       - Deployment checklist: operations/deployment.md
       - Configuration reference: operations/configuration.md
       - Performance and scaling: operations/performance.md
+      - Backup and restore: operations/backup-restore.md
+      - Upgrading: operations/upgrading.md
       - Security: operations/security.md
       - Troubleshooting: operations/troubleshooting.md
   - Reference:
