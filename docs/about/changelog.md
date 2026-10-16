@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Evals** (see [the guide](../guides/evals.md))
+
+- Scores now reach the backends: `LangfuseSink`, `PhoenixSink`, `LangSmithSink` and `OTelSink` implement `score()` (`OnlineEvaluator` passes the run's span). Verified against real Langfuse 2.x and Phoenix servers; LangSmith by mock only.
+- `Dataset.from_traces` (scrubbed by default), `aaa.eval.redteam` (attack corpus, `evaluate_guard`, `attack_suite`, `NoLeak`, `Resisted`), and `SimulatedUser` + `SessionEvalRunner` for multi-turn evaluation. `CaseResult.turns`.
+
 **New algorithms** (see [the guide](../guides/algorithms/reasoning.md))
 
 - `Reflexion` (fresh attempts informed by written lessons; validator or LLM critic; lessons returned and re-injectable), `Debate` (parallel agents, rounds, judge or vote; at most 7 agents and 4 rounds), `Swarm` with `Agent` (handoffs as tool calls: an agent can only use its own tools, one transfer per turn, capped transfers) and `TreeOfThoughts` (beam search with a hard call bound).

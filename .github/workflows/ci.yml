@@ -327,6 +327,31 @@ jobs:
           /tmp/smoke/bin/aaa-server serve --help
           /tmp/smoke/bin/aaa --help
 
+  score-backends:
+    # Scores delivered to a real Phoenix and a real Langfuse (2.x: one container plus Postgres). LangSmith is mock-only.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AAA_TEST_PHOENIX_URL: http://localhost:6006
+      AAA_TEST_LANGFUSE_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra otel
+      - name: Start Phoenix and Langfuse
+        run: |
+          docker run -d --name phx -p 6006:6006 arizephoenix/phoenix:latest
+          docker network create lfnet
+          docker run -d --name lfpg --network lfnet -e POSTGRES_PASSWORD=pg -e POSTGRES_DB=lf postgres:16
+          sleep 6
+          docker run -d --name lf --network lfnet -p 3100:3000 -e DATABASE_URL=postgresql://postgres:pg@lfpg:5432/lf -e NEXTAUTH_SECRET=s -e SALT=s -e NEXTAUTH_URL=http://localhost:3100 -e TELEMETRY_ENABLED=false -e LANGFUSE_INIT_ORG_ID=o -e LANGFUSE_INIT_PROJECT_ID=p -e LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-test -e LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-test -e LANGFUSE_INIT_USER_EMAIL=a@b.co -e LANGFUSE_INIT_USER_PASSWORD=password123 -e LANGFUSE_INIT_USER_NAME=a langfuse/langfuse:2
+          for i in $(seq 1 40); do curl -sf localhost:6006/healthz && curl -sf localhost:3100/api/public/health && break; sleep 3; done
+          sleep 5; docker restart lf; for i in $(seq 1 30); do curl -sf localhost:3100/api/public/health && break; sleep 2; done; sleep 5
+      - name: Score delivery tests
+        run: uv run pytest -v -p no:cacheprovider tests/unit/test_eval_m9.py
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped

@@ -31,3 +31,21 @@
 ::: aaa.eval.ragas.RagasJudge
 
 ::: aaa.eval.inspect.aaa_solver
+
+## Traces, red team and simulation
+
+::: aaa.eval.traces.dataset_from_traces
+
+::: aaa.eval.evaluate_guard
+
+::: aaa.eval.RedTeamReport
+
+::: aaa.eval.attack_suite
+
+::: aaa.eval.NoLeak
+
+::: aaa.eval.Resisted
+
+::: aaa.eval.SimulatedUser
+
+::: aaa.eval.SessionEvalRunner

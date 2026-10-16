@@ -72,6 +72,65 @@ so a slow or failing judge never touches the run. `max_cost` caps judge spend in
 `aaa.eval.score` event (so it appears as an evaluator span in later trace exports) and passed to any sink that supports scores.
 Note that the sample sees your production inputs and outputs: a hosted judge receives them.
 
+## Where scores go
+
+A sink that can take scores (`Scorable`) gets each `OnlineEvaluator` score for the run's trace *and span*:
+
+| Sink | Delivered as | Verified |
+|---|---|---|
+| `LangfuseSink` | `POST /api/public/scores` (numeric, boolean or categorical; the id is derived from trace, span and name, so a repeat updates) | against a real Langfuse 2.95 server; Langfuse 4 not tried (one score object per call, retried as a list if the server asks) |
+| `PhoenixSink` | span annotations (trace annotations when no span), `identifier` makes a repeat an update; retried briefly if the span has not arrived | against a real Phoenix server |
+| `LangSmithSink` | feedback on the run LangSmith built from the span id (the 8 span-id bytes right-aligned in a UUID, as LangSmith documents for OTel ingestion) | **mock transport only**: no LangSmith account was used |
+| any `OTelSink` | an `evaluate <name>` evaluator span under the run's span | against the SDK's in-memory exporter |
+
+Delivery failures are logged and never touch the run.
+
+## Cases from real traffic
+
+```python
+cases = await Dataset.from_traces(engine, tenant="acme", algo="react", limit=200)        # inputs scrubbed by default
+golden = await Dataset.from_traces(engine, expected="output")                           # pins CURRENT behaviour
+```
+
+Child runs, eval runs, open runs, session runs and runs whose payloads were erased are skipped. Inputs go through `standard_redactor()` unless you pass your own `Redactor` or `scrub=False`.
+`expected="output"` records what the run answered, which makes a regression test, not a correctness test: review it. The case id is the run id.
+
+## Red-team checks
+
+`aaa.eval.redteam` ships a small corpus (prompt injection, indirect injection, system-prompt leaks, jailbreaks, harmful requests, PII extraction, tool abuse; written for this library) and look-alike benign prompts.
+
+```python
+report = await evaluate_guard(my_guard)                      # any Guardrail, including the adapters
+report.assert_ok(max_attack_success=0.2, max_false_positive=0.05)
+
+suite = attack_suite(my_agent, canary="CANARY-7f3a91")      # plant the canary in the agent's prompt
+await suite.run(engine)                                      # metrics: resisted, no_leak
+```
+
+"Attack success" means nothing *prevented* the attack (`allow` or only `flag`). `Resisted` is a refusal-phrase heuristic unless you pass `judge=LLMJudge(...)`. This is a regression smoke test
+for your defences, **not a benchmark and not a security audit**: passing it says the obvious attacks are covered.
+
+## Simulated users
+
+```python
+customer = SimulatedUser(client, persona="an impatient customer", goal="get a refund for order A1")
+report = await SessionEvalRunner(manager, customer, [Contains("refund")], max_turns=6).run(engine, dataset)
+```
+
+A model plays the user; the agent side is a real `Session`, so context, memory and tools behave as in production. A conversation ends at `max_turns`, when the simulator says `[DONE]`, when its `max_cost` (counted only
+if the client reports cost) is spent, or when a turn fails. A case's `input` may set its own `persona`, `goal` and `opening`. Metrics see the transcript as `result.text` and the pairs as `result.turns`; the agent's
+spans, steps, tokens and cost are summed over the turns. The sessions are stamped `aaa_eval`, so `OnlineEvaluator` ignores them. A simulated user is another model: its behaviour varies, so repeat important cases.
+
+```python
+--8<-- "examples/eval_extras.py"
+```
+
+```text
+from traces: {'task': 'Refund me, my email is [REDACTED:email]'}
+red team: attack success 90%, false positives 0%
+conversation: 2 turns; contains help = True
+```
+
 ## Third-party eval libraries
 
 Each library's metrics become AAA metrics, and **their judge calls go through your own `LLMClient`** (your gateway, keys and cost

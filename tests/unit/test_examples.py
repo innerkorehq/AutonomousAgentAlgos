@@ -123,6 +123,11 @@ EXPECTED = {
         "swarm: Done: refunded A1 | handoffs: [['triage', 'billing']] | answered by: billing",
         "tree: (8 / (3 - 8 / 3)) | score 10.0 | at most 24 model calls",
     ],
+    "eval_extras.py": [
+        "from traces: {'task': 'Refund me, my email is [REDACTED:email]'}",
+        "red team: attack success 90%, false positives 0%",
+        "conversation: 2 turns; contains help = True",
+    ],
     "mcp_server.py": [
         "offered: ['add', 'lookup', 'run_agent']",
         "add: 5",
