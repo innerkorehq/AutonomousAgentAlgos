@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-16)
+
+A large release: everything below is additive to the 0.2 API and log format (see [Upgrading](../operations/upgrading.md)).
 
 **Operations** (see [backup and restore](../operations/backup-restore.md), [upgrading](../operations/upgrading.md), [performance](../operations/performance.md), [deployment](../operations/deployment.md))
 
