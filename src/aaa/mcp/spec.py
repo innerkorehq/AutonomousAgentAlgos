@@ -59,9 +59,40 @@ class TenancySpec(_M):
 
     tenant: str = Field(default="mcp", min_length=1, max_length=100, pattern=r"^[^/\s]+$")
     user: str | None = Field(default=None, max_length=200)
+    scopes: list[str] | None = (
+        None  # scopes the single stdio caller holds; None = all (a tool restricted by `scopes` is then visible)
+    )
 
 
-class ToolOverride(_M):
+class RateLimit(_M):
+    """A token bucket per caller and tool: `per_minute` calls on average, bursts up to `burst` (default: `per_minute`, at most 10)."""
+
+    per_minute: int = Field(ge=1, le=1_000_000)
+    burst: int | None = Field(default=None, ge=1, le=1_000_000)
+
+
+class ToolLimits(_M):
+    """Per-tool limits and visibility. A caller who may not see a tool gets exactly the answer for a tool that does not exist."""
+
+    timeout_s: float | None = Field(default=None, gt=0, le=3600)
+    rate_limit: RateLimit | None = None
+    max_concurrency: int | None = Field(
+        default=None, ge=1, le=256
+    )  # calls in flight; the next is refused, not queued
+    scopes: list[str] | None = Field(
+        default=None, min_length=1
+    )  # visible to callers holding at least one of these
+    tenants: list[str] | None = Field(default=None, min_length=1)  # visible to these tenants only
+
+
+class ToolPolicy(ToolLimits):
+    """Limits for every tool whose final name matches one of the globs. For each setting the first matching policy wins; a tool's own
+    `overrides` entry beats every policy. A glob that matches no tool is an error."""
+
+    match: list[str] = Field(min_length=1)
+
+
+class ToolOverride(ToolLimits):
     title: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     annotations: AnnotationsSpec | None = None
@@ -82,6 +113,7 @@ class ToolsSpec(_M):
     rename: dict[str, str] = Field(default_factory=dict)
     prefix: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_-]*$")
     overrides: dict[str, ToolOverride] = Field(default_factory=dict)
+    policies: list[ToolPolicy] = Field(default_factory=list)
     expose_approval_tools: bool = False
 
     @field_validator("rename")
@@ -496,13 +528,16 @@ __all__ = [
     "PromptArg",
     "PromptMessage",
     "PromptSpec",
+    "RateLimit",
     "ResourceSpec",
     "RuntimeSpec",
     "ServerSpec",
     "Source",
     "StaticResource",
     "TenancySpec",
+    "ToolLimits",
     "ToolOverride",
+    "ToolPolicy",
     "ToolsSpec",
     "TransportSpec",
 ]

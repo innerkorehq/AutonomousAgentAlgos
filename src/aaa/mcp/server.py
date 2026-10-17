@@ -28,7 +28,7 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 from aaa.mcp.model import (
@@ -42,6 +42,7 @@ from aaa.mcp.model import (
     MCPToolDef,
     MCPToolMeta,
 )
+from aaa.mcp.policy import Gates, Limiter, ToolRule
 from aaa.mcp.sources.prompts import PromptDef, PromptError
 from aaa.mcp.sources.resources import ResourceNotFound, ResourceSet
 from aaa.runtime.budget import Budget
@@ -78,6 +79,9 @@ class MCPToolServer:
         structured_output: bool = False,
         resources: ResourceSet | None = None,
         prompts: Mapping[str, PromptDef] | None = None,
+        tool_policy: Mapping[str, ToolRule] | None = None,
+        default_scopes: Iterable[str] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         if algorithms and engine is None:
             raise ValueError("algorithms= needs engine=")
@@ -94,6 +98,9 @@ class MCPToolServer:
         )
         self.resources = resources
         self.prompts = dict(prompts or {})
+        self.tool_policy = dict(tool_policy or {})
+        self.default_scopes = None if default_scopes is None else frozenset(default_scopes)
+        self._limiter, self._gates = Limiter(clock), Gates()
         self.agent_budget = agent_budget or Budget(
             max_steps=50, max_tokens=200_000, deadline_s=120.0
         )
@@ -135,11 +142,25 @@ class MCPToolServer:
     def _exposed(self, t: Tool) -> bool:
         return (not t.requires_approval) or self.approval is not None or self.expose_approval_tools
 
-    def list_tools(self) -> list[MCPToolDef]:
+    def _visible(self, name: str, tenant: str, scopes: frozenset[str] | None) -> bool:
+        rule = self.tool_policy.get(name)
+        return rule is None or rule.visible_to(tenant, scopes)
+
+    def _scopes(self, scopes: Iterable[str] | None) -> frozenset[str] | None:
+        return self.default_scopes if scopes is None else frozenset(scopes)
+
+    def list_tools(
+        self, *, tenant: str | None = None, scopes: Iterable[str] | None = None
+    ) -> list[MCPToolDef]:
+        """The tools this caller may see. `tenant`/`scopes` come from a host that authenticated its caller; `scopes=None` means the
+        server's `default_scopes` (None there too: unrestricted)."""
+        tenant, held = tenant or self.tenant, self._scopes(scopes)
         out = [
             self._tool_def(t)
             for n in self.registry.names()
-            if (t := self.registry.get(n)) is not None and self._exposed(t)
+            if (t := self.registry.get(n)) is not None
+            and self._exposed(t)
+            and self._visible(n, tenant, held)
         ]
         if self.algorithms:
             out.append(
@@ -197,6 +218,7 @@ class MCPToolServer:
         *,
         tenant: str | None = None,
         user: str | None = None,
+        scopes: Iterable[str] | None = None,
     ) -> MCPCallResult:
         """Run one tool. `tenant`/`user` are for a host that has authenticated its caller (aaa-server); the
         MCP client never supplies them."""
@@ -205,8 +227,21 @@ class MCPToolServer:
         if name == RUN_AGENT and self.algorithms:
             return await self._run_agent(args, tenant, user)
         t = self.registry.get(name)
-        if t is None or not self._exposed(t):
+        if (
+            t is None
+            or not self._exposed(t)
+            or not self._visible(name, tenant, self._scopes(scopes))
+        ):
             return MCPCallResult(f"unknown tool {name!r}", True)
+        rule = self.tool_policy.get(name)
+        if (
+            rule is not None
+            and rule.rate_per_minute is not None
+            and not self._limiter.allow(
+                f"{tenant}/{user or ''}/{name}", rule.rate_per_minute, rule.burst
+            )
+        ):
+            return MCPCallResult(f"{name} is being called too often; retry shortly", True)
         if t.requires_approval and self.approval is not None:
             try:
                 allowed = await self.approval(name, args, tenant)
@@ -222,12 +257,16 @@ class MCPToolServer:
             tenant=tenant,
             meta={"user": user} if user else {},
         )
+        limit = rule.max_concurrency if rule is not None else None
+        if limit is not None and not self._gates.enter(name, limit):
+            return MCPCallResult(f"{name} is busy; retry shortly", True)
+        timeout = rule.timeout_s if rule is not None and rule.timeout_s else t.timeout_s
         try:
-            async with asyncio.timeout(t.timeout_s):
+            async with asyncio.timeout(timeout):
                 value = await t.invoke(args, ctx)
             return self._result(t, value)
         except TimeoutError:
-            return MCPCallResult(f"{name} timed out after {t.timeout_s:g}s", True)
+            return MCPCallResult(f"{name} timed out after {timeout:g}s", True)
         except ToolArgsError as e:
             return MCPCallResult(str(e), True)
         except ToolError as e:
@@ -235,6 +274,9 @@ class MCPToolServer:
         except Exception:
             log.exception("tool %s failed", name)
             return MCPCallResult(f"{name} failed", True)
+        finally:
+            if limit is not None:
+                self._gates.leave(name)
 
     def _result(self, t: Tool, value: Any) -> MCPCallResult:
         schema = self._output_schema(t)

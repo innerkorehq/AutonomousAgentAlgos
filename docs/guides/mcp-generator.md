@@ -333,6 +333,28 @@ recorded: aaa with 8 hashed files
 - **Relative paths in a configuration are relative to the configuration file** (the OpenAPI `document`, a module `path`, a files-resource `root`), so a project works from any directory. `--vendor-spec` copies OpenAPI documents into `openapi/` (an https document is fetched through the same safe fetcher) for reproducible builds.
 - `init` refuses to write into a non-empty directory without `--force`. With HTTP, put a TLS-terminating reverse proxy in front (see [deployment](../operations/deployment.md)); if the configuration has `agents`, wire your model and handlers onto the engine first.
 
+## Limits and visibility per tool
+
+`[[tools.policies]]` sets limits for every tool whose final name matches a glob; a tool's own `[tools.overrides.NAME]` takes the same fields and beats the policies. For each setting the first matching policy wins.
+
+```toml
+[[tools.policies]]
+match = ["orders_*"]
+timeout_s = 10
+rate_limit = { per_minute = 30, burst = 5 }   # per caller and tool
+max_concurrency = 2                           # the next call is refused, not queued
+
+[[tools.policies]]
+match = ["orders_refund"]
+scopes = ["admin"]                            # visible and callable only to callers holding one of these
+tenants = ["acme"]
+```
+
+* A caller who may not see a tool gets exactly the answer for a tool that does not exist, in `tools/list` and in `tools/call`.
+* Behind `aaa-server`, the caller's scopes are those of the API key. Over stdio the one caller holds `tenancy.scopes` (default: unrestricted).
+* Rate-limit and concurrency refusals are tool errors with a fixed message (`... retry shortly`) that does not say how the limits are set. Rate limits are in memory, per process; use the server's admission control for a cluster-wide limit.
+* A `match` that selects no tool is an error, so a typo cannot silently leave a tool unlimited. `aaa mcp inspect` lists the rules.
+
 ## Precedence
 
 Lowest to highest: the file, then `AAA_MCP__*` environment variables, then command-line flags. Levels are separated by double underscores (`AAA_MCP__SERVER__NAME=desk`, `AAA_MCP__TOOLS__EXCLUDE='["a","b"]'`: lists, numbers and booleans are JSON). Dictionaries merge key by key; lists and scalars are **replaced**, so `--exclude x` means exactly `x`.

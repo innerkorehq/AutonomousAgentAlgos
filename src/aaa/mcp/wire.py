@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from aaa.mcp.model import (
@@ -86,8 +87,10 @@ def initialize_result(core: MCPToolServer, protocol_version: str) -> dict[str, A
     return out
 
 
-def tools_list_result(core: MCPToolServer) -> dict[str, Any]:
-    return {"tools": [tool_to_wire(t) for t in core.list_tools()]}
+def tools_list_result(
+    core: MCPToolServer, tenant: str | None = None, scopes: Iterable[str] | None = None
+) -> dict[str, Any]:
+    return {"tools": [tool_to_wire(t) for t in core.list_tools(tenant=tenant, scopes=scopes)]}
 
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:

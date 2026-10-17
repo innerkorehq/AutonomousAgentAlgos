@@ -145,3 +145,26 @@ async def test_the_official_sdk_client_works_against_it_over_a_real_socket():
             server.should_exit = True
             await task
     _ = mcp, httpx
+
+
+async def test_tool_scopes_follow_the_authenticated_principal():
+    from aaa.mcp.policy import ToolRule
+
+    core = MCPToolServer(
+        ToolRegistry([whoami]),
+        tool_policy={"whoami": ToolRule(scopes=frozenset({"admin"}))},
+    )
+    env, engine = await make_env(mcp=core)
+    async with engine, env.client("key-acme") as admin, env.client("key-acme-approver") as plain:
+        listed = lambda r: [t["name"] for t in r.json()["result"]["tools"]]
+        assert listed(await admin.post("/mcp", json=rpc("tools/list"))) == ["whoami"]
+        assert listed(await plain.post("/mcp", json=rpc("tools/list"))) == []
+        call = rpc("tools/call", {"name": "whoami", "arguments": {}})
+        assert (await admin.post("/mcp", json=call)).json()["result"]["isError"] is False
+        a = (await plain.post("/mcp", json=call)).json()["result"]
+        b = (
+            await plain.post("/mcp", json=rpc("tools/call", {"name": "nope", "arguments": {}}))
+        ).json()["result"]
+        assert a["isError"] and a["content"][0]["text"].replace("whoami", "X") == b["content"][0][
+            "text"
+        ].replace("nope", "X")

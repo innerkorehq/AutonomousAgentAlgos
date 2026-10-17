@@ -10,6 +10,7 @@ Importing code is the one dangerous thing a spec can ask for, so it has a kill-s
 from __future__ import annotations
 
 import asyncio
+import fnmatch
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Self
 from aaa.mcp.config import SpecError
 from aaa.mcp.filters import Entry, rename, select, with_name
 from aaa.mcp.model import MCPAnnotations, MCPToolMeta
+from aaa.mcp.policy import ToolRule
 from aaa.mcp.server import ApprovalCallback, MCPToolServer
 from aaa.mcp.sources.agents import AgentTool, check_spec
 from aaa.mcp.sources.mcp_upstream import Upstream, start_upstream, subprocess_allowed
@@ -38,6 +40,7 @@ from aaa.mcp.spec import (
     MCPSpec,
     ModuleSource,
     ObjectsSource,
+    ToolLimits,
     ToolOverride,
 )
 from aaa.tools.tool import ToolRegistry
@@ -77,6 +80,35 @@ async def _object(ref: str, live: Mapping[str, Any] | None, where: str) -> Any:
     if live is not None and ref in live:
         return live[ref]
     raise SpecError(f"{where}: no live object {ref!r} (use module:attribute or pass live={{...}})")
+
+
+def _rules(spec: MCPSpec, names: list[str]) -> dict[str, ToolRule]:
+    """Per-tool rules: a tool's own override beats the first matching policy, setting by setting."""
+    for pol in spec.tools.policies:
+        if not any(fnmatch.fnmatchcase(n, g) for g in pol.match for n in names):
+            raise SpecError(f"tools.policies: match {pol.match} selects no exposed tool")
+    out: dict[str, ToolRule] = {}
+    for n in names:
+        layers: list[ToolLimits] = [
+            *([spec.tools.overrides[n]] if n in spec.tools.overrides else []),
+            *(p for p in spec.tools.policies if any(fnmatch.fnmatchcase(n, g) for g in p.match)),
+        ]
+
+        def first(attr: str, layers: list[ToolLimits] = layers) -> Any:
+            return next((v for lim in layers if (v := getattr(lim, attr)) is not None), None)
+
+        rl, scopes, tenants = first("rate_limit"), first("scopes"), first("tenants")
+        rule = ToolRule(
+            timeout_s=first("timeout_s"),
+            rate_per_minute=rl.per_minute if rl else None,
+            burst=rl.burst if rl else None,
+            max_concurrency=first("max_concurrency"),
+            scopes=frozenset(scopes) if scopes else None,
+            tenants=frozenset(tenants) if tenants else None,
+        )
+        if rule != ToolRule():
+            out[n] = rule
+    return out
 
 
 async def _resources(spec: MCPSpec, live: Mapping[str, Any] | None) -> ResourceSet | None:
@@ -350,6 +382,7 @@ async def _compile(
             "narrow tools.include/exclude/tags or raise the limit deliberately"
         )
     registry = ToolRegistry([e.tool for e in final])
+    rules = _rules(spec, [e.tool.name for e in final])
     resources = await _resources(spec, live)
     prompts = {p.name: PromptDef(p) for p in spec.prompts}
     if len(prompts) != len(spec.prompts):
@@ -370,11 +403,13 @@ async def _compile(
         structured_output=spec.limits.structured_output,
         resources=resources,
         prompts=prompts,
+        tool_policy=rules,
+        default_scopes=spec.tenancy.scopes,
     )
     core.spec = spec
     core.owns_engine = owns_engine
     offered = {t.name for t in core.list_tools()}
-    core.hidden = [e.tool.name for e in final if e.tool.name not in offered]
+    core.hidden = [e.tool.name for e in final if not core._exposed(e.tool)]
     core.report = [
         f"{len(offered)} tool(s) exposed from {len(spec.sources)} source(s)",
         *(f"note: {n}" for n in notes),
@@ -421,6 +456,14 @@ def describe(core: CompiledServer) -> dict[str, Any]:
         ],
         "prompts": wire.prompts_list_result(core.list_prompts())["prompts"],
         "hidden": core.hidden,
+        "policies": {
+            n: {
+                k: (sorted(v) if isinstance(v, frozenset) else v)
+                for k, v in vars(r).items()
+                if v is not None
+            }
+            for n, r in sorted(core.tool_policy.items())
+        },
         "report": core.report,
     }
 

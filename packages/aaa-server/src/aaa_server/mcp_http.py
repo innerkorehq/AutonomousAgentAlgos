@@ -7,6 +7,7 @@ anything the MCP client says."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from aaa.mcp import wire
@@ -24,7 +25,12 @@ def _error(id_: Any, code: int, message: str) -> dict[str, Any]:
 
 
 async def handle(
-    core: MCPToolServer, message: Any, *, tenant: str, user: str
+    core: MCPToolServer,
+    message: Any,
+    *,
+    tenant: str,
+    user: str,
+    scopes: Iterable[str] | None = None,
 ) -> dict[str, Any] | None:
     """Answer one JSON-RPC message, or `None` for a notification / client response (which get `202`)."""
     if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
@@ -43,12 +49,12 @@ async def handle(
     if method == "ping":
         return {"jsonrpc": "2.0", "id": id_, "result": {}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": id_, "result": wire.tools_list_result(core)}
+        return {"jsonrpc": "2.0", "id": id_, "result": wire.tools_list_result(core, tenant, scopes)}
     if method == "tools/call":
         name, args = params.get("name"), params.get("arguments") or {}
         if not isinstance(name, str) or not isinstance(args, dict):
             return _error(id_, INVALID_PARAMS, "tools/call needs a name and an arguments object")
-        r = await core.call(name, args, tenant=tenant, user=user)
+        r = await core.call(name, args, tenant=tenant, user=user, scopes=scopes)
         return {"jsonrpc": "2.0", "id": id_, "result": wire.call_result_to_wire(r)}
     if method.startswith("resources/") and core.has_resources:
         if method == "resources/list":

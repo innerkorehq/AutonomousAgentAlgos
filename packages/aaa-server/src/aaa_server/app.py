@@ -635,7 +635,9 @@ class ServerApp:
             message = json.loads(await self._raw(request))
         except ValueError:
             return JSONResponse(mcp_http._error(None, mcp_http.PARSE_ERROR, "parse error"), 400)
-        answer = await mcp_http.handle(core, message, tenant=p.tenant, user=p.subject)
+        answer = await mcp_http.handle(
+            core, message, tenant=p.tenant, user=p.subject, scopes=p.scopes
+        )
         return Response(status_code=202) if answer is None else JSONResponse(answer)
 
     async def mcp_other(self, request: Request, p: Principal) -> Response:

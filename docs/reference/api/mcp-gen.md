@@ -43,3 +43,9 @@ See [Generating an MCP server](../../guides/mcp-generator.md).
 ::: aaa.mcp.spec.McpSource
 
 ::: aaa.mcp.compile.CompiledServer
+
+::: aaa.mcp.spec.ToolPolicy
+
+::: aaa.mcp.spec.ToolLimits
+
+::: aaa.mcp.policy.ToolRule
