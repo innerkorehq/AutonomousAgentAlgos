@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-18)
 
 **Generated MCP servers** (see [the guide](../guides/mcp-generator.md) and [threat model](../security/mcp-generator.md))
 
