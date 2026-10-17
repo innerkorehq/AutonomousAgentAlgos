@@ -26,6 +26,19 @@ Written before the code. The generator turns a **configuration** into an MCP ser
 | T8 | **Approval bypass by defaults.** Exposing every operation of an API makes destructive calls available. | Non-GET operations and module functions default to `requires_approval`, which keeps them hidden (indistinguishable from unknown tools) unless the operator opts in; a startup banner lists every state-changing operation exposed without approval. | M4, M5 |
 | T9 | **Enumeration through errors.** Distinguishing "forbidden" from "missing" resources, tools or prompts. | The same response for both. | M1, M3 |
 
+## Added for upstream MCP servers, per-tool policy, includes and client config
+
+| # | Threat | Decision | Ships in |
+|---|---|---|---|
+| T10 | **An upstream MCP server is untrusted input.** Its tool descriptions are shown to your model, its results go back to your callers, and it can be slow, huge, or hostile. | Descriptions are length-capped and replaceable (`description_overrides`) and `aaa mcp inspect` prints what the model will see; results are capped; every call has a timeout; an upstream failing or dying gives a generic tool error and never takes the server down. Unannotated or destructive upstream tools require approval (and so stay hidden) unless you say otherwise; annotations are not trusted unless `trust_annotations` is set. | M7b |
+| T11 | **Launching a subprocess.** A configuration that names a command runs it. | No shell (an argument vector); the child gets a minimal environment plus the variables you list in `env_from` (so a secret in the server's environment is not inherited by accident); `AAA_MCP_ALLOW_SUBPROCESS=0` (`--no-subprocess-sources`) turns every stdio upstream into a startup error before anything is spawned, and a configuration that launches processes is refused when writable by everyone. | M7b |
+| T12 | **Upstream credentials.** | Only `env:` references; sent only to the upstream's own host; never in schemas, reports, errors or `inspect`; a missing variable is a startup error. | M7b |
+| T13 | **SSRF and DNS rebinding through an HTTP upstream.** | The upstream URL must be https (plain http only to loopback with an explicit flag), its host must be in a mandatory `allowed_hosts`, and the connection goes through a transport that resolves the name once, requires every address to be public (unless `allow_private_networks`), connects to that address with the original name as `Host`/SNI, and follows no redirects. Both SDK generations accept a caller-supplied HTTP client, so the same protection applies on 1.x (`httpx`) and 2.x (`httpx2`). | M7b |
+| T14 | **A shared upstream is not tenant-isolated.** One connection serves every caller. | Stated, not hidden: the operator decides whether an upstream is safe to share. Tenant and user are never forwarded to an upstream. | M7b |
+| T15 | **Policy bypass and enumeration.** A tool hidden by scope or tenant must not be distinguishable from a missing one; rate limits and timeouts must not leak internals. | Hidden-by-scope answers exactly like an unknown tool; refusals use fixed generic messages. | M7c |
+| T16 | **Include/overlay abuse.** `include` that reads outside the configuration's tree, or loops. | Included paths are resolved (symlinks too) and must stay inside the top file's directory; depth and size are capped; cycles are an error naming the files. | M7d |
+| T17 | **A client-config entry that leaks a secret.** | `aaa mcp client-config` prints variable NAMES as `${NAME}` placeholders, never values. | M7e |
+
 ## Also decided
 
 - **Protocol floor.** The generated server supports the MCP SDK 1.x line from **1.21.2** (older 1.x releases no longer import with current pydantic) and 2.x; the stdio and HTTP paths are tested against both.
