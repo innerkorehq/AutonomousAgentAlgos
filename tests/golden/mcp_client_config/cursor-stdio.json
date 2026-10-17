@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "order-desk": {
+      "command": "aaa",
+      "args": [
+        "mcp",
+        "serve",
+        "--config",
+        "/srv/mcp/server.toml"
+      ],
+      "env": {
+        "FILES_KEY": "${env:FILES_KEY}",
+        "ORDERS_API_TOKEN": "${env:ORDERS_API_TOKEN}",
+        "SEARCH_TOKEN": "${env:SEARCH_TOKEN}"
+      }
+    }
+  }
+}

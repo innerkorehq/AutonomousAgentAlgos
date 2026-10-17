@@ -128,6 +128,12 @@ EXPECTED = {
         "red team: attack success 90%, false positives 0%",
         "conversation: 2 turns; contains help = True",
     ],
+    "mcp_everything.py": [
+        "title: Everything (production)",
+        "tools: ['getOrder', 'up_shout', 'word_count']",
+        "up_shout: HELLO",
+        "policies: ['up_shout', 'word_count']",
+    ],
     "mcp_init.py": [
         "drift right after generating: none",
         "secret names (never values): ['ORDERS_API_TOKEN']",
@@ -213,7 +219,10 @@ EXPECTED = {
     ],
 }
 COMPILE_ONLY = {"cluster_worker.py", "cluster_client.py"}
-OPTIONAL_DEPS = {"mcp_tools.py": "mcp"}  # skipped where the optional package is not installed
+OPTIONAL_DEPS = {
+    "mcp_tools.py": "mcp",
+    "mcp_everything.py": "mcp",
+}  # skipped where the optional package is not installed
 
 
 def test_every_example_is_accounted_for():

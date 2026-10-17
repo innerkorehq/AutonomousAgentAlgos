@@ -373,6 +373,36 @@ name = "everything"
 * `aaa mcp flatten --config server.toml --overlay prod.toml -o flat.toml` writes the composed result as one file (paths made relative to the output) for review or shipping. Without `-o` it prints JSON.
 * If the composed configuration imports code or launches processes, **every** contributing file must not be world-writable.
 
+## Connecting a client
+
+`aaa mcp client-config` prints the entry an MCP client needs for this one server:
+
+```bash
+aaa mcp client-config --config server.toml --client claude-desktop
+aaa mcp client-config --config server.toml --client cursor --transport http --url https://mcp.example.com/mcp
+```
+
+* `--client` is `claude-desktop`, `cursor` or `generic`; `--transport` is `stdio` (the client launches `aaa mcp serve --config ...`, with your `--overlay`s) or `http` (a server behind aaa-server, `--url` required, https unless localhost).
+* The configuration is validated first; the output is `{"mcpServers": {name: entry}}`, ready to merge into the client's own file.
+* The entry lists the **names** of the environment variables the server reads (API credentials, upstream headers, pass-through variables) as `${NAME}` placeholders (`${env:NAME}` for Cursor). A value is never printed. HTTP entries send `Authorization: Bearer ${MCP_API_KEY}`.
+* Claude Desktop starts local commands, so its HTTP entry goes through the `mcp-remote` bridge via `npx`.
+
+One configuration for everything: an included file, a module, an OpenAPI document, another MCP server, a resource, a prompt, a policy and an overlay.
+
+```python
+--8<-- "examples/mcp_everything.py"
+```
+
+```text
+title: Everything (production)
+tools: ['getOrder', 'up_shout', 'word_count']
+resources: ['readme']
+prompts: ['summarize']
+word_count: 4
+up_shout: HELLO
+policies: ['up_shout', 'word_count']
+```
+
 ## Precedence
 
 Lowest to highest: the file with its includes, then overlay files, then `AAA_MCP__*` environment variables, then command-line flags. Levels are separated by double underscores (`AAA_MCP__SERVER__NAME=desk`, `AAA_MCP__TOOLS__EXCLUDE='["a","b"]'`: lists, numbers and booleans are JSON). Dictionaries merge key by key; lists and scalars are **replaced**, so `--exclude x` means exactly `x`.

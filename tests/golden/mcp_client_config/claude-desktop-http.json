@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "order-desk": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.example.com/mcp",
+        "--header",
+        "Authorization:Bearer ${MCP_API_KEY}"
+      ],
+      "env": {
+        "MCP_API_KEY": "${MCP_API_KEY}"
+      }
+    }
+  }
+}

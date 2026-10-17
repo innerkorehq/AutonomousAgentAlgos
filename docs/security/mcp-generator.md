@@ -37,7 +37,7 @@ Written before the code. The generator turns a **configuration** into an MCP ser
 | T14 | **A shared upstream is not tenant-isolated.** One connection serves every caller. | Stated, not hidden: the operator decides whether an upstream is safe to share. Tenant and user are never forwarded to an upstream. | M7b |
 | T15 | **Policy bypass and enumeration.** A tool hidden by scope or tenant must not be distinguishable from a missing one; rate limits and timeouts must not leak internals. | Hidden-by-scope answers exactly like an unknown tool; refusals use fixed generic messages. Tested through core and aaa-server with two API keys. | M7c |
 | T16 | **Include/overlay abuse.** `include` that reads outside the configuration's tree, or loops. | Included paths are resolved (symlinks too) and must stay inside the top file's directory; depth and size are capped; cycles are an error naming the files. Overlays are operator-chosen. When the composed configuration runs code or processes, every contributing file is checked for world-write. | M7d |
-| T17 | **A client-config entry that leaks a secret.** | `aaa mcp client-config` prints variable NAMES as `${NAME}` placeholders, never values. | M7e |
+| T17 | **A client-config entry that leaks a secret.** | `aaa mcp client-config` prints variable NAMES as `${NAME}` placeholders, never values (checked with canary values in the environment); an HTTP entry must be https unless localhost. | M7e |
 
 ## Also decided
 

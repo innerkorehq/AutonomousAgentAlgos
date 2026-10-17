@@ -58,13 +58,9 @@ class Options:
 # -- what the spec needs from the environment -------------------------------------------------
 def secret_names(spec: MCPSpec) -> list[str]:
     """Names (never values) of the environment variables the configuration refers to."""
-    out: list[str] = []
-    for src in spec.sources:
-        if src.type == "openapi" and src.auth is not None:
-            m = _ENV.match(src.auth.secret.strip())
-            if m:
-                out.append(m.group(1))
-    return sorted(set(out))
+    from aaa.mcp.clientconfig import env_names
+
+    return env_names(spec)
 
 
 # -- templates (static: nothing a user types is substituted into Python) -----------------------

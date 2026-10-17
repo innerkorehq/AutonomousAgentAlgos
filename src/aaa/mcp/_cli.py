@@ -144,6 +144,14 @@ def add_arguments(mc: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
         "--no-compile", action="store_true", help="only validate the file; do not import anything"
     )
     common(mc.add_parser("inspect", help="print what clients will be shown"))
+    cc = mc.add_parser(
+        "client-config", help="print the entry an MCP client needs to connect to this server"
+    )
+    common(cc)
+    cc.add_argument("--client", choices=["claude-desktop", "cursor", "generic"], default="generic")
+    cc.add_argument("--transport", choices=["stdio", "http"], default="stdio")
+    cc.add_argument("--url", help="where aaa-server serves /mcp (with --transport http)")
+    cc.add_argument("--server-name", help="the name to register under (default: the server's name)")
     fl = mc.add_parser(
         "flatten",
         help="write the configuration with its includes and overlays composed into one file",
@@ -370,6 +378,22 @@ async def run(a: argparse.Namespace) -> int:
         return await _legacy_serve(a.factory)
     try:
         spec = load_spec(a.config, overlay=overlay_of(a), overlays=a.overlay or ())
+        if a.sub == "client-config":
+            from aaa.mcp import clientconfig
+
+            if not a.config:
+                raise SpecError("client-config needs --config")
+            entry = clientconfig.build(
+                spec,
+                a.config,
+                client=a.client,
+                transport=a.transport,
+                url=a.url,
+                name=a.server_name,
+                overlays=a.overlay or [],
+            )
+            print(json.dumps(entry, indent=2))
+            return 0
         if a.sub == "flatten":
             return _flatten(spec, a.output)
         if a.sub == "check" and a.no_compile:
