@@ -145,6 +145,85 @@ def load_spec(
     return spec
 
 
+# -- writing a spec ------------------------------------------------------------------------------
+_BARE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _toml_key(k: str) -> str:
+    return k if _BARE.match(k) else json.dumps(k)
+
+
+def _toml_value(v: Any) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int | float):
+        return repr(v)
+    if isinstance(v, str):
+        return json.dumps(v, ensure_ascii=False)  # a JSON string is a valid TOML basic string
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{ " + ", ".join(f"{_toml_key(k)} = {_toml_value(x)}" for k, x in v.items()) + " }"
+    raise SpecError(f"cannot write {type(v).__name__} to TOML")
+
+
+def to_toml(data: dict[str, Any]) -> str:
+    """The spec as TOML: scalars first, then one `[table]` per nested mapping, `[[table]]` per list of mappings; mappings inside those are inline."""
+    out: list[str] = []
+
+    def section(path: list[str], d: dict[str, Any]) -> None:
+        for k, v in d.items():
+            if not isinstance(v, dict) and not (
+                isinstance(v, list) and v and all(isinstance(x, dict) for x in v)
+            ):
+                out.append(f"{_toml_key(k)} = {_toml_value(v)}")
+        for k, v in d.items():
+            full = [*path, k]
+            if isinstance(v, dict):
+                simple = {a: b for a, b in v.items()}
+                out.append(f"\n[{'.'.join(_toml_key(p) for p in full)}]")
+                section(full, simple)
+            elif isinstance(v, list) and v and all(isinstance(x, dict) for x in v):
+                for item in v:
+                    out.append(f"\n[[{'.'.join(_toml_key(p) for p in full)}]]")
+                    for a, b in item.items():
+                        out.append(f"{_toml_key(a)} = {_toml_value(b)}")
+
+    section([], data)
+    return "\n".join(out).strip() + "\n"
+
+
+def dump_spec(spec: MCPSpec, path: str | os.PathLike[str] | None = None) -> str:
+    """The spec as text in the format `path`'s extension names (JSON if no path). Defaults are left out, so the file says only what you chose.
+    Specs with `live` sources refer to Python objects a file cannot carry, so they cannot be written."""
+    if any(src.type == "live" for src in spec.sources):
+        raise SpecError(
+            "this configuration holds live Python objects (type = 'live'), which a file cannot carry"
+        )
+    data = spec.model_dump(mode="json", exclude_defaults=True, exclude_none=True)
+    data = {"version": 1, **{k: v for k, v in data.items() if k != "version"}}
+    suffix = Path(path).suffix.lower() if path else ".json"
+    if suffix == ".toml":
+        text = to_toml(data)
+    elif suffix in (".yaml", ".yml"):
+        try:
+            import yaml  # pyright: ignore[reportMissingModuleSource]
+        except ImportError:
+            raise SpecError(
+                "writing YAML needs PyYAML: pip install 'autonomous-agent-architecture[mcp-config]'"
+            ) from None
+        text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    elif suffix == ".json":
+        text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    else:
+        raise SpecError(
+            f"unknown configuration format {suffix!r} (use .yaml, .yml, .json or .toml)"
+        )
+    if path is not None:
+        Path(path).write_text(text)
+    return text
+
+
 # -- secrets -------------------------------------------------------------------------------------
 _REF = re.compile(r"^(?:env:|\$\{)([A-Za-z_][A-Za-z0-9_]*)\}?$")
 

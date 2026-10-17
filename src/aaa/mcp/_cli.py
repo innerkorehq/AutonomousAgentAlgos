@@ -159,7 +159,13 @@ async def run(a: argparse.Namespace) -> int:
         return 0
     for line in core.report:  # stderr: stdout is the protocol
         print(f"aaa mcp: {line}", file=sys.stderr)
-    await serve_stdio(core)
+    if core.owns_engine and core.engine is not None:
+        async with (
+            core.engine
+        ):  # the engine this configuration built runs for as long as the server does
+            await serve_stdio(core)
+    else:
+        await serve_stdio(core)
     return 0
 
 

@@ -30,8 +30,9 @@ def normalize(obj: Any, where: str) -> list[Tool]:
     )
 
 
-async def load_ref(ref: str) -> list[Tool]:
-    """Import `package.module:attribute` and return its tools. Importing runs the module's code: callers check the kill-switch first."""
+async def resolve_ref(ref: str) -> Any:
+    """Import `package.module:attribute` and return the object, calling it first (and awaiting the result) if it is a plain function.
+    Importing runs the module's code: callers check the kill-switch first."""
     module, _, attr = ref.partition(":")
     try:
         mod = importlib.import_module(module)
@@ -54,4 +55,8 @@ async def load_ref(ref: str) -> list[Tool]:
             obj = await obj
     except Exception as e:  # noqa: BLE001 - the user's factory failed; say which one, not a stack from our internals
         raise SpecError(f"sources: {ref} raised {type(e).__name__}: {str(e)[:200]}") from None
-    return normalize(obj, ref)
+    return obj
+
+
+async def load_ref(ref: str) -> list[Tool]:
+    return normalize(await resolve_ref(ref), ref)

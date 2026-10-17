@@ -42,6 +42,9 @@ class TransportSpec(_M):
 class LimitsSpec(_M):
     max_result_chars: int = Field(default=100_000, ge=1_000, le=5_000_000)
     max_tools: int = Field(default=200, ge=1, le=2_000)
+    max_concurrent_agents: int = Field(
+        default=4, ge=1, le=64
+    )  # agent runs in flight across all agent tools
     structured_output: bool = (
         True  # send structuredContent for tools whose return type is an object type
     )
@@ -90,6 +93,49 @@ class ToolsSpec(_M):
         return v
 
 
+class BudgetSpec(_M):
+    """What one agent run may spend. `deadline_s` is mandatory: a run that parks on a human approval (which MCP cannot give)
+    would otherwise wait forever."""
+
+    deadline_s: float = Field(gt=0, le=3600)
+    max_steps: int | None = Field(default=None, ge=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    max_cost: float | None = Field(default=None, gt=0)
+
+
+DEFAULT_AGENT_INPUT: dict[str, Any] = {
+    "type": "object",
+    "properties": {"input": {"type": "string", "description": "What to ask the agent."}},
+    "required": ["input"],
+    "additionalProperties": False,
+}
+
+
+class AgentToolSpec(_M):
+    """Expose one algorithm as its own tool. `algorithm` is a `module:attribute` reference (an `Algorithm`) or the key of an object
+    passed to `compile_spec(..., live={...})`. `input_template` builds the algorithm's input from the validated arguments:
+    string values may contain `{argument}` placeholders (plain names only; no attribute access, no format specs) and a value that is
+    exactly one placeholder keeps the argument's own type."""
+
+    name: str = Field(pattern=TOOL_NAME)
+    algorithm: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=2000)
+    budget: BudgetSpec
+    input_schema: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_AGENT_INPUT))
+    input_template: dict[str, Any] = Field(default_factory=lambda: {"task": "{input}"})
+    output: Literal["text", "json"] = "text"  # the answer's text, or the whole outcome as JSON
+    annotations: AnnotationsSpec | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class RuntimeSpec(_M):
+    """The engine agent tools run on, for a server that builds its own (`aaa mcp serve`). `engine` is `module:attribute`: an
+    `Engine` or a function (sync or async) returning one, already wired with your model and tool handlers. Behind
+    `aaa-server` the server's engine is used and this is ignored."""
+
+    engine: str | None = Field(default=None, pattern=r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
+
+
 class _Source(_M):
     tags: list[str] = Field(default_factory=list)
     prefix: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_-]*$")
@@ -121,18 +167,27 @@ class MCPSpec(_M):
     tenancy: TenancySpec = Field(default_factory=TenancySpec)
     sources: list[Source] = Field(default_factory=list)
     tools: ToolsSpec = Field(default_factory=ToolsSpec)
+    agents: list[AgentToolSpec] = Field(default_factory=list)
+    runtime: RuntimeSpec = Field(default_factory=RuntimeSpec)
 
     def imports_code(self) -> bool:
         """Whether compiling this spec imports modules (and so runs code): see the kill-switch in `aaa.mcp.compile`."""
-        return any(s.type == "objects" for s in self.sources)
+        return (
+            any(s.type == "objects" for s in self.sources)
+            or self.runtime.engine is not None
+            or any(":" in a.algorithm for a in self.agents)
+        )
 
 
 __all__ = [
+    "AgentToolSpec",
     "AnnotationsSpec",
+    "BudgetSpec",
     "LimitsSpec",
     "LiveSource",
     "MCPSpec",
     "ObjectsSource",
+    "RuntimeSpec",
     "ServerSpec",
     "Source",
     "TenancySpec",

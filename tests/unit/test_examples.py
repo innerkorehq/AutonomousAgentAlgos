@@ -128,6 +128,11 @@ EXPECTED = {
         "red team: attack success 90%, false positives 0%",
         "conversation: 2 turns; contains help = True",
     ],
+    "mcp_builder.py": [
+        "tool: ask_support | None | {'openWorldHint': True}",
+        "tool: lookup_order | Look up an order | {'readOnlyHint': True}",
+        "answer: Order A1 shipped yesterday.",
+    ],
     "mcp_generated.py": [
         "offers: desk_forecast | Weather forecast | {'readOnlyHint': True, 'openWorldHint': True}",
         "hidden (need approval): ['desk_erase_history']",

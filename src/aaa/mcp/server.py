@@ -24,6 +24,7 @@ The defaults assume the caller is not the person who wrote the tools:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -173,7 +174,11 @@ class MCPToolServer:
             meta={"user": user} if user else {},
         )
         try:
-            return self._result(t, await t.invoke(args, ctx))
+            async with asyncio.timeout(t.timeout_s):
+                value = await t.invoke(args, ctx)
+            return self._result(t, value)
+        except TimeoutError:
+            return MCPCallResult(f"{name} timed out after {t.timeout_s:g}s", True)
         except ToolArgsError as e:
             return MCPCallResult(str(e), True)
         except ToolError as e:

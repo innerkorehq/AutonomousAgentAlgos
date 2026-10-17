@@ -2,7 +2,7 @@
 
 Instead of writing a server in Python, describe the one you want. `aaa.mcp` compiles a **configuration** (a file, flags, environment variables or the Python API) into a running MCP server: it chooses which tools to expose, how they are named and described, which hints clients get, and whether results are structured. The same description serves over stdio (`aaa mcp serve`) and over HTTP behind [`aaa-server`](../server/index.md).
 
-This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, and the command line. Resources, prompts, agents-as-tools, OpenAPI and Python-module sources, a builder API and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
+This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, the Python builder and the command line. Resources, prompts, OpenAPI and Python-module sources and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
 
 ```python
 --8<-- "examples/mcp_generated.py"
@@ -63,6 +63,60 @@ requires_approval = false        # explicitly lift an approval requirement
 **Hints.** Without overrides, clients get what the tool already says: an approval-gated tool is `destructiveHint`, a tool with `delivery="at_least_once"` is `idempotentHint`; nothing else is claimed. `annotations` in an override *replace* those. Hints are advice to clients; the server enforces none of them.
 
 **Structured output.** A tool whose return type is a pydantic model, `TypedDict` or dataclass advertises an `outputSchema`, and a successful result carries `structuredContent` (validated against the schema; a result that does not conform is reported as an error, not sent) plus the same JSON as text. A structure that would be cut short by `max_result_chars` is not sent at all, only the truncated text. Other return types (strings, lists, numbers) have no output schema. `SchemaTool` accepts an explicit `output_schema=`, and an override can set one.
+
+## Algorithms as tools
+
+Each configured agent becomes its own tool, with its own name, input schema, budget and hints, instead of the generic `run_agent`.
+
+```toml
+[runtime]
+engine = "myapp.agents:engine"        # an Engine (or a function returning one) wired with your model and handlers
+
+[limits]
+max_concurrent_agents = 4             # agent runs in flight across all agent tools
+
+[[agents]]
+name = "ask_support"
+algorithm = "myapp.agents:support_agent"     # module:attribute, or a live key from Python
+description = "Ask the support agent a customer question."
+output = "text"                       # the answer's text; "json" returns the whole outcome
+input_template = { task = "Customer {customer}: {question}" }
+annotations = { open_world = true }
+
+[agents.budget]
+deadline_s = 30                       # mandatory
+max_steps = 10
+max_cost = 0.25
+
+[agents.input_schema]
+type = "object"
+required = ["question"]
+additionalProperties = false
+properties = { question = { type = "string" }, customer = { type = "string" } }
+```
+
+- **A deadline is mandatory.** MCP has no way to approve a tool call, so a run that parks on a human approval would otherwise wait forever; the engine ends it at the deadline. Steps, tokens and cost are optional extra limits.
+- **The template can only insert validated arguments.** Placeholders are plain names (`{question}`): no attributes, indexes, conversions or format specs, and every placeholder must be a property of the input schema. A value that is exactly one placeholder keeps the argument's own type (a list stays a list).
+- **The tenant and user come from the host**, never from the arguments (there is no `tenant` field to fill in): the stdio configuration, or the authenticated principal behind `aaa-server`.
+- **Concurrency is capped.** Beyond `max_concurrent_agents` runs in flight, a call waits a few seconds and is then refused with a clear message instead of queuing model spend.
+- A failed agent (budget exceeded, cancelled, failed) is an MCP tool error carrying the outcome kind and reason.
+- With `aaa mcp serve`, the engine named in `runtime.engine` is started and stopped with the server. Behind `aaa-server`, pass the server's engine to `acompile_spec(spec, engine=...)` and `runtime` is ignored.
+
+## The Python builder
+
+The same configuration as typed, chainable Python. Every method edits an `MCPSpec`, so what you build can be written to a file.
+
+```python
+--8<-- "examples/mcp_builder.py"
+```
+
+```text
+tool: ask_support | None | {'openWorldHint': True}
+tool: lookup_order | Look up an order | {'readOnlyHint': True}
+answer: Order A1 shipped yesterday.
+```
+
+`builder.spec()` returns the validated `MCPSpec`; `builder.dump("server.toml")` writes it (JSON, TOML or YAML by extension, defaults left out) unless it holds live Python objects (`add_tools(registry)`, an algorithm object), which a file cannot carry; `await builder.acompile()` / `builder.compile()` build the server. `dump_spec`/`load_spec` round-trip: a spec written and read back is equal.
 
 ## Precedence
 

@@ -7,6 +7,9 @@
 - `aaa mcp serve --config server.toml|json|yaml`, `aaa mcp check`, `aaa mcp inspect`: an MCP server compiled from a validated `MCPSpec` (file, `AAA_MCP__*` environment, flags). Choose, rename, prefix, tag-filter and describe tools; per-tool titles and hints; approval-gated tools stay hidden unless you say otherwise; an import kill-switch.
 - Structured output: tools returning pydantic models, TypedDicts or dataclasses advertise an `outputSchema` and return validated `structuredContent`; titles, annotations, server instructions and version are now sent by stdio and by `aaa-server`'s `POST /mcp` from one set of wire shapes (`aaa.mcp.wire`).
 - `Tool.output_schema`, `SchemaTool(output_schema=)`, `MCPToolServer(title=, version=, instructions=, tool_meta=, structured_output=)` (additive; defaults unchanged).
+- Algorithms as tools: `[[agents]]` in the configuration (or `MCPServerBuilder.agent(...)`) exposes an algorithm as its own tool with its own input schema, a mandatory budget with a deadline, an input template restricted to validated arguments, a concurrency cap, and tenant/user from the host. `runtime.engine` lets `aaa mcp serve` build the engine.
+- `MCPServerBuilder`: the same configuration as typed, chainable Python; `dump_spec`/`load_spec` write and read JSON, TOML and YAML (round-trip tested).
+- **Behaviour change:** `MCPToolServer.call` now enforces each tool's `timeout_s` (default 60 s), as `ToolHandler` already did; a tool that needs longer must set a longer `timeout_s`.
 - **The `mcp` extra now requires `mcp>=1.21.2`.** Older 1.x releases no longer import with current pydantic. New optional extra `mcp-config` (PyYAML) for YAML configurations.
 
 ## 0.3.1 (renamed)

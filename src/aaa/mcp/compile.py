@@ -18,7 +18,8 @@ from aaa.mcp.config import SpecError
 from aaa.mcp.filters import Entry, rename, select
 from aaa.mcp.model import MCPAnnotations, MCPToolMeta
 from aaa.mcp.server import ApprovalCallback, MCPToolServer
-from aaa.mcp.sources.objects import load_ref, normalize
+from aaa.mcp.sources.agents import AgentTool, check_spec
+from aaa.mcp.sources.objects import load_ref, normalize, resolve_ref
 from aaa.mcp.spec import AnnotationsSpec, MCPSpec, ToolOverride
 from aaa.tools.tool import ToolRegistry
 
@@ -36,6 +37,7 @@ class CompiledServer(MCPToolServer):
     spec: MCPSpec
     report: list[str]
     hidden: list[str]
+    owns_engine: bool = False  # the spec built this engine (runtime.engine): whoever serves it must enter and leave it
 
 
 def _annotations(a: AnnotationsSpec | None) -> MCPAnnotations | None:
@@ -69,7 +71,44 @@ async def acompile_spec(
         raise SpecError(
             f"sources {refs} import code, but importing is disabled (AAA_MCP_ALLOW_IMPORT=0 / --no-import-sources)"
         )
+    owns_engine = False
+    if engine is None and spec.runtime.engine is not None:
+        engine = await resolve_ref(spec.runtime.engine)
+        from aaa.runtime.engine import Engine as _Engine
+
+        if not isinstance(engine, _Engine):
+            raise SpecError(
+                f"runtime.engine: {spec.runtime.engine} is not an Engine (got {type(engine).__name__})"
+            )
+        owns_engine = True
+    agent_ann: dict[str, MCPAnnotations] = {}  # by origin, because tools may be renamed afterwards
     entries: list[Entry] = []
+    if spec.agents:
+        if engine is None:
+            raise SpecError(
+                "agents need an engine to run on: set runtime.engine = 'module:attribute', or pass engine= to compile_spec "
+                "(behind aaa-server, the server's engine)"
+            )
+        gate = asyncio.Semaphore(spec.limits.max_concurrent_agents)
+        for ag in spec.agents:
+            check_spec(ag)
+            if ":" in ag.algorithm:
+                algo = await resolve_ref(ag.algorithm)
+            elif live is not None and ag.algorithm in live:
+                algo = live[ag.algorithm]
+            else:
+                raise SpecError(
+                    f"agents.{ag.name}: no algorithm {ag.algorithm!r} (use module:attribute or pass live={{...}})"
+                )
+            if not hasattr(algo, "on_event") or not hasattr(algo, "subscriptions"):
+                raise SpecError(
+                    f"agents.{ag.name}: {ag.algorithm!r} is not an algorithm (got {type(algo).__name__})"
+                )
+            entries.append(
+                Entry(AgentTool(ag, algo, engine, gate), f"agent {ag.name}", frozenset(ag.tags))
+            )
+            if ag.annotations is not None:
+                agent_ann[f"agent {ag.name}"] = _annotations(ag.annotations) or MCPAnnotations()
     for src in spec.sources:
         if src.type == "objects":
             tools, origin = await load_ref(src.ref), f"objects {src.ref}"
@@ -90,13 +129,22 @@ async def acompile_spec(
         raise SpecError(
             f"tools.overrides: no exposed tool is named {sorted(unknown)} (overrides use the final exposed name)"
         )
-    meta: dict[str, MCPToolMeta] = {}
+    meta: dict[str, MCPToolMeta] = {
+        e.tool.name: MCPToolMeta(None, agent_ann[e.origin], None)
+        for e in chosen
+        if e.origin in agent_ann
+    }
     final: list[Entry] = []
     for e in chosen:
         o = spec.tools.overrides.get(e.tool.name)
         if o is not None:
             e = _override(e, o)
-            meta[e.tool.name] = MCPToolMeta(o.title, _annotations(o.annotations), o.output_schema)
+            prior = meta.get(e.tool.name)
+            meta[e.tool.name] = MCPToolMeta(
+                o.title,
+                _annotations(o.annotations) or (prior.annotations if prior else None),
+                o.output_schema,
+            )
         final.append(e)
     if len(final) > spec.limits.max_tools:
         raise SpecError(
@@ -120,6 +168,7 @@ async def acompile_spec(
         structured_output=spec.limits.structured_output,
     )
     core.spec = spec
+    core.owns_engine = owns_engine
     offered = {t.name for t in core.list_tools()}
     core.hidden = [e.tool.name for e in final if e.tool.name not in offered]
     core.report = [f"{len(offered)} tool(s) exposed from {len(spec.sources)} source(s)"]

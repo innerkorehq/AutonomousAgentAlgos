@@ -21,3 +21,11 @@ See [Generating an MCP server](../../guides/mcp-generator.md).
 ::: aaa.mcp.model.MCPToolMeta
 
 ::: aaa.mcp.model.MCPAnnotations
+
+::: aaa.mcp.MCPServerBuilder
+
+::: aaa.mcp.config.dump_spec
+
+::: aaa.mcp.spec.AgentToolSpec
+
+::: aaa.mcp.spec.BudgetSpec
