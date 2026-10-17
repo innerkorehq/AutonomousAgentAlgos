@@ -509,7 +509,7 @@ requires-dist = [
     { name = "langgraph", marker = "extra == 'langmem'", specifier = ">=1.0" },
     { name = "langmem", marker = "extra == 'langmem'", specifier = ">=0.0.30" },
     { name = "litellm", marker = "extra == 'litellm'" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.12,<3" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.21.2,<3" },
     { name = "mem0ai", marker = "extra == 'mem0'", specifier = ">=2.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6,<2" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
