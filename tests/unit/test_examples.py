@@ -128,6 +128,11 @@ EXPECTED = {
         "red team: attack success 90%, false positives 0%",
         "conversation: 2 turns; contains help = True",
     ],
+    "mcp_openapi.py": [
+        "offered: getOrder | Fetch one order | read-only: True",
+        "hidden (state-changing, need approval): ['cancelOrder', 'createOrder']",
+        "1 operation(s) skipped as unsupported: uploadReceipt",
+    ],
     "mcp_modules.py": [
         "tool: word_count | Count the words in a text. | ['text']",
         "hidden (need approval): ['delete_file']",

@@ -193,9 +193,38 @@ class SafeFetcher:
         return httpx.URL(f"{scheme}://{shown}:{port}{u.raw_path.decode()}"), host, host_header
 
     async def fetch(self, url: str, *, headers: Mapping[str, str] | None = None) -> FetchResult:
+        return await self.request("GET", url, headers=headers)
+
+    async def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        body: bytes | None = None,
+        auth: Mapping[str, str] | None = None,
+        auth_host: str | None = None,
+        same_host_redirects_only: bool = False,
+        raw: bool = False,
+    ) -> FetchResult:
+        """Any HTTP request through the same checks as `fetch`.
+
+        * `auth` headers (credentials) are sent ONLY to `auth_host`; a redirect to another host is refused outright when credentials are
+          attached, and with `same_host_redirects_only` always.
+        * A redirect is followed only for GET and HEAD: re-sending a POST body to wherever a server points is never done.
+        * `raw=True` returns the body as text exactly as received (no HTML-to-text conversion)."""
         try:
             async with asyncio.timeout(self.policy.timeout_s):
-                return await self._fetch(url, headers)
+                return await self._fetch(
+                    url,
+                    headers,
+                    method=method.upper(),
+                    req_body=body,
+                    auth=auth,
+                    auth_host=(auth_host or "").rstrip(".").lower() or None,
+                    same_host_only=same_host_redirects_only or bool(auth),
+                    raw=raw,
+                )
         except TimeoutError as e:
             raise FetchBlocked(f"timed out after {self.policy.timeout_s}s") from e
         except (
@@ -203,7 +232,18 @@ class SafeFetcher:
         ) as e:  # connection refused, TLS failure, protocol error: say what kind, not the details
             raise FetchBlocked(f"the request failed ({type(e).__name__})") from e
 
-    async def _fetch(self, url: str, extra_headers: Mapping[str, str] | None) -> FetchResult:
+    async def _fetch(
+        self,
+        url: str,
+        extra_headers: Mapping[str, str] | None,
+        *,
+        method: str = "GET",
+        req_body: bytes | None = None,
+        auth: Mapping[str, str] | None = None,
+        auth_host: str | None = None,
+        same_host_only: bool = False,
+        raw: bool = False,
+    ) -> FetchResult:
         p = self.policy
         hops: list[str] = []
         timeout = httpx.Timeout(p.timeout_s, connect=p.connect_timeout_s)
@@ -221,12 +261,22 @@ class SafeFetcher:
                     "user-agent": p.user_agent,
                     "accept": "text/html,text/plain,application/json;q=0.9,*/*;q=0.1",
                     **(extra_headers or {}),
+                    **(
+                        auth if auth and host == auth_host else {}
+                    ),  # credentials go to one host only
                     "host": host_header,
                 }
                 ext = {"sni_hostname": host} if connect.scheme == "https" else {}
-                async with client.stream("GET", connect, headers=hdrs, extensions=ext) as resp:
+                async with client.stream(
+                    method, connect, headers=hdrs, extensions=ext, content=req_body
+                ) as resp:
                     if resp.is_redirect and (loc := resp.headers.get("location")):
                         nxt = urljoin(current, loc)
+                        if method not in ("GET", "HEAD"):
+                            raise FetchBlocked(f"a redirect to a {method} request was not followed")
+                        nxt_host = (httpx.URL(nxt).host or "").rstrip(".").lower()
+                        if same_host_only and nxt_host != host:
+                            raise FetchBlocked("a redirect to another host was refused")
                         if httpx.URL(current).scheme == "https" and httpx.URL(nxt).scheme == "http":
                             raise FetchBlocked("a redirect from https to http was refused")
                         hops.append(nxt)
@@ -251,7 +301,7 @@ class SafeFetcher:
                         text = bytes(body).decode(charset, errors="replace")
                     except LookupError:
                         text = bytes(body).decode("utf-8", errors="replace")
-                    if ctype in ("text/html", "application/xhtml+xml"):
+                    if not raw and ctype in ("text/html", "application/xhtml+xml"):
                         from aaa.ingest.loaders import html_to_text
 
                         text = html_to_text(text)[0]

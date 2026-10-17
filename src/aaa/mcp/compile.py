@@ -21,6 +21,7 @@ from aaa.mcp.model import MCPAnnotations, MCPToolMeta
 from aaa.mcp.server import ApprovalCallback, MCPToolServer
 from aaa.mcp.sources.agents import AgentTool, check_spec
 from aaa.mcp.sources.objects import load_ref, normalize, resolve_ref
+from aaa.mcp.sources.openapi import load_openapi
 from aaa.mcp.sources.prompts import PromptDef
 from aaa.mcp.sources.pymodule import load_module
 from aaa.mcp.sources.resources import (
@@ -218,6 +219,19 @@ async def acompile_spec(
                         f"module {src.module}",
                         frozenset(src.tags),
                         loaded.annotations.get(t.name),
+                    )
+                )
+            continue
+        if src.type == "openapi":
+            api = await load_openapi(src)
+            notes += api.notes
+            for t in api.tools:
+                entries.append(
+                    Entry(
+                        with_name(t, src.prefix + t.name),
+                        f"openapi {src.document}",
+                        frozenset(src.tags),
+                        api.annotations.get(t.name),
                     )
                 )
             continue

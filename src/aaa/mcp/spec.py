@@ -265,6 +265,70 @@ class ObjectsSource(_Source):
     ref: str = Field(pattern=r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
 
 
+class AuthSpec(_M):
+    """Credentials for the upstream API. The secret is NEVER written here: `secret` is an `env:NAME` reference, read from the
+    environment when the server starts (a missing variable is a startup error) and again for each call. The credential is sent only
+    to the API's own host, never after a redirect, and never exposed to the model."""
+
+    scheme: Literal["bearer", "api_key", "basic"]
+    secret: str = Field(min_length=1, max_length=200)
+    username: str | None = Field(default=None, max_length=200)  # basic auth only
+    location: Literal["header", "query"] = "header"  # api_key only
+    name: str = Field(
+        default="X-API-Key", pattern=r"^[A-Za-z0-9_-]{1,64}$"
+    )  # api_key header or query-parameter name
+
+    @model_validator(mode="after")
+    def _check(self) -> AuthSpec:
+        from aaa.mcp.config import Secret, SpecError
+
+        try:
+            Secret.parse(self.secret, field="auth.secret")
+        except SpecError as e:
+            raise ValueError(str(e)) from None
+        if self.scheme == "basic" and not self.username:
+            raise ValueError("basic auth needs a username")
+        if self.scheme != "basic" and self.username:
+            raise ValueError("username applies to basic auth only")
+        return self
+
+
+class OpenAPISource(_Source):
+    """One tool per operation of an OpenAPI 3.0/3.1 document.
+
+    `allowed_hosts` is mandatory: the API's own host must be in it, and every request goes through the SSRF-safe fetcher (public
+    addresses only, connection pinned, redirects to other hosts refused). Operations that change state (`methods_requiring_approval`,
+    by default POST, PUT, PATCH and DELETE) require approval, and so stay hidden, unless matched by `no_approval`. Features this
+    generator does not support (cookie parameters, form bodies, non-default parameter styles ...) skip that operation with a note,
+    never silently mis-call it."""
+
+    type: Literal["openapi"]
+    document: str = Field(min_length=1, max_length=500)  # a file path or an https:// URL
+    base_url: str | None = Field(
+        default=None, max_length=500
+    )  # overrides the document's servers[0]
+    allowed_hosts: list[str] = Field(min_length=1)
+    allow_private_networks: bool = False  # explicit opt-in for an API on a private address
+    auth: AuthSpec | None = None
+    operations: list[str] = Field(default_factory=lambda: ["*"])  # globs on operationId
+    exclude_operations: list[str] = Field(default_factory=list)
+    methods_requiring_approval: list[Literal["get", "head", "put", "post", "patch", "delete"]] = (
+        Field(default_factory=lambda: ["post", "put", "patch", "delete"])
+    )
+    no_approval: list[str] = Field(
+        default_factory=list
+    )  # operationId globs that run without approval
+    description_overrides: dict[str, str] = Field(default_factory=dict)
+    description_max_chars: int = Field(default=1000, ge=50, le=5000)
+    max_response_bytes: int = Field(default=1_000_000, ge=1_000, le=20_000_000)
+    max_request_bytes: int = Field(default=100_000, ge=100, le=5_000_000)
+    timeout_s: float = Field(default=20.0, gt=0, le=300)
+    max_concurrency: int = Field(default=4, ge=1, le=64)
+    use_response_schemas: bool = (
+        False  # advertise the 2xx JSON schema as outputSchema and validate results against it
+    )
+
+
 class ModuleSource(_Source):
     """Public functions of a Python module as tools: schema from type hints, description from the docstring.
 
@@ -296,7 +360,9 @@ class LiveSource(_Source):
     key: str = Field(min_length=1, max_length=80)
 
 
-Source = Annotated[ObjectsSource | ModuleSource | LiveSource, Field(discriminator="type")]
+Source = Annotated[
+    ObjectsSource | ModuleSource | OpenAPISource | LiveSource, Field(discriminator="type")
+]
 
 
 class MCPSpec(_M):
@@ -328,6 +394,7 @@ class MCPSpec(_M):
 __all__ = [
     "AgentToolSpec",
     "AnnotationsSpec",
+    "AuthSpec",
     "BudgetSpec",
     "FilesResource",
     "IndexResource",
@@ -337,6 +404,7 @@ __all__ = [
     "MemoryResource",
     "ModuleSource",
     "ObjectsSource",
+    "OpenAPISource",
     "PromptArg",
     "PromptMessage",
     "PromptSpec",

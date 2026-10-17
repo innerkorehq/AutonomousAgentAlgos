@@ -2,7 +2,7 @@
 
 Instead of writing a server in Python, describe the one you want. `aaa.mcp` compiles a **configuration** (a file, flags, environment variables or the Python API) into a running MCP server: it chooses which tools to expose, how they are named and described, which hints clients get, and whether results are structured. The same description serves over stdio (`aaa mcp serve`) and over HTTP behind [`aaa-server`](../server/index.md).
 
-This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules as tools, resources and prompts, the Python builder and the command line. OpenAPI sources and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
+This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules and OpenAPI documents as tools, resources and prompts, the Python builder and the command line. Project scaffolding is planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
 
 ```python
 --8<-- "examples/mcp_generated.py"
@@ -63,6 +63,43 @@ requires_approval = false        # explicitly lift an approval requirement
 **Hints.** Without overrides, clients get what the tool already says: an approval-gated tool is `destructiveHint`, a tool with `delivery="at_least_once"` is `idempotentHint`; nothing else is claimed. `annotations` in an override *replace* those. Hints are advice to clients; the server enforces none of them.
 
 **Structured output.** A tool whose return type is a pydantic model, `TypedDict` or dataclass advertises an `outputSchema`, and a successful result carries `structuredContent` (validated against the schema; a result that does not conform is reported as an error, not sent) plus the same JSON as text. A structure that would be cut short by `max_result_chars` is not sent at all, only the truncated text. Other return types (strings, lists, numbers) have no output schema. `SchemaTool` accepts an explicit `output_schema=`, and an override can set one.
+
+## OpenAPI documents as tools
+
+```toml
+[[sources]]
+type = "openapi"
+document = "openapi.json"            # a file path, or an https:// URL
+allowed_hosts = ["api.example.com"]  # mandatory: the only host(s) this server may call; the API's host must be in it
+# base_url = "https://api.example.com/v1"   # overrides servers[0] (needed when the server URL has variables)
+no_approval = ["getOrder", "list*"]  # operationId globs that run without approval
+operations = ["*"]                   # which operationIds to turn into tools ...
+exclude_operations = ["admin*"]      # ... and which never to
+max_response_bytes = 1000000
+timeout_s = 20
+use_response_schemas = false         # advertise the 2xx JSON schema as outputSchema and validate results against it
+
+[sources.auth]                       # optional; the secret is a reference, never the value
+scheme = "bearer"                    # bearer | api_key | basic
+secret = "env:ORDERS_API_TOKEN"
+```
+
+```python
+--8<-- "examples/mcp_openapi.py"
+```
+
+```text
+offered: getOrder | Fetch one order | read-only: True
+hidden (state-changing, need approval): ['cancelOrder', 'createOrder']
+note: 1 operation(s) skipped as unsupported: uploadReceipt (request body of type ['multipart/form-data'] (only JSON bodies are supported))
+```
+
+- **One tool per operation.** The name is the `operationId` (or `method_path`); path, query and header parameters and a JSON request body are merged into one flat input schema (a small object body is flattened; a name that clashes becomes `path_id`, `query_id`, `header_id`). Responses: JSON is returned parsed, text as text, a non-2xx status as a tool error with the status and the first 300 characters of the body.
+- **State changes need approval.** GET and HEAD are offered (hinted read-only and idempotent). POST, PUT, PATCH and DELETE require approval by default, and so stay hidden, until you list them in `no_approval`; every such operation exposed without approval is named in a WARNING in `check`/`inspect`.
+- **Only the API's host is ever called.** Requests go through the SSRF-safe fetcher: public addresses only (an API on a private address needs `allow_private_networks = true`, which is reported), the connection pinned to the checked address, plain `http` only if the base URL is `http` (reported), and the port taken from the base URL. A redirect to another host is refused, only a GET or HEAD is redirected at all (a POST body is never re-sent), and a caller's argument cannot reach another host: path values are percent-encoded, so `../admin` stays one segment.
+- **Credentials.** The secret is read from the environment at startup (missing = error, before serving) and again for each call, sent only to the API's own host, never after a redirect, and never present in a schema, report, error or `inspect` output. `Authorization`, `Cookie`, `Host` and framing headers cannot be set from tool arguments (an operation declaring such a header parameter is skipped).
+- **Not supported, so skipped with a note instead of guessed:** cookie parameters, object-valued or non-default-style parameters (`deepObject`, `matrix`, non-exploded arrays), form/multipart/XML bodies, remote `$ref`s, Swagger 2.0. Local `$ref`s are resolved (cycles are cut at a fixed depth), `allOf` is merged one level, and OpenAPI 3.0's `nullable` and boolean `exclusiveMinimum` are converted to JSON Schema.
+- **A spec you do not control puts its words in your model's context.** Operation summaries and descriptions become tool descriptions; they are length-capped (`description_max_chars`) and can be replaced (`description_overrides`), and `aaa mcp inspect` prints exactly what the model will see. Review it before connecting a third party's document.
 
 ## Python modules as tools
 
@@ -261,4 +298,4 @@ async def build() -> ServerConfig:
 
 ## Verified, and not
 
-Tested: configuration loading and precedence (JSON, TOML, YAML, environment, flags), selection/naming/override rules and their error messages, the kill-switch, structured output including the non-conforming and oversized cases, and that the official SDK server, the stdio subprocess and the HTTP handler all describe tools identically. The suite passes on the `mcp` SDK 1.21.2, 1.30 and 2.x. **Not verified:** real MCP hosts (Claude Desktop, IDEs). **The `mcp` extra now requires 1.21.2 or newer**: older 1.x releases no longer import with current pydantic.
+Tested: configuration loading and precedence (JSON, TOML, YAML, environment, flags), selection/naming/override rules and their error messages, the kill-switch, structured output including the non-conforming and oversized cases, and that the official SDK server, the stdio subprocess and the HTTP handler all describe tools identically. The suite passes on the `mcp` SDK 1.21.2, 1.30 and 2.x. **Not verified:** real MCP hosts (Claude Desktop, IDEs); large public OpenAPI documents (hundreds of operations); OpenAPI 3.1-only constructs beyond the JSON Schema they share with 3.0; APIs that require OAuth. **The `mcp` extra now requires 1.21.2 or newer**: older 1.x releases no longer import with current pydantic.
