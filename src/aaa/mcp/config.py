@@ -159,11 +159,11 @@ def load_spec(
         spec = MCPSpec.model_validate(data)
     except ValidationError as e:
         raise SpecError(format_errors(e, where)) from None
-    if where and spec.imports_code():
+    if where and (spec.imports_code() or spec.launches_processes()):
         mode = Path(where).stat().st_mode
         if mode & stat.S_IWOTH:
             raise SpecError(
-                f"{where}: this configuration imports code and is writable by everyone; "
+                f"{where}: this configuration imports code or launches processes and is writable by everyone; "
                 f"restrict it (chmod o-w) or the server would run whatever someone else puts in it"
             )
     return spec

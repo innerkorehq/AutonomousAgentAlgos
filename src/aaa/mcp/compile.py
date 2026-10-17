@@ -13,13 +13,14 @@ import asyncio
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from aaa.mcp.config import SpecError
 from aaa.mcp.filters import Entry, rename, select, with_name
 from aaa.mcp.model import MCPAnnotations, MCPToolMeta
 from aaa.mcp.server import ApprovalCallback, MCPToolServer
 from aaa.mcp.sources.agents import AgentTool, check_spec
+from aaa.mcp.sources.mcp_upstream import Upstream, start_upstream, subprocess_allowed
 from aaa.mcp.sources.objects import load_ref, normalize, resolve_ref
 from aaa.mcp.sources.openapi import load_openapi
 from aaa.mcp.sources.prompts import PromptDef
@@ -31,7 +32,14 @@ from aaa.mcp.sources.resources import (
     ResourceSet,
     StaticProvider,
 )
-from aaa.mcp.spec import AnnotationsSpec, MCPSpec, ModuleSource, ObjectsSource, ToolOverride
+from aaa.mcp.spec import (
+    AnnotationsSpec,
+    McpSource,
+    MCPSpec,
+    ModuleSource,
+    ObjectsSource,
+    ToolOverride,
+)
 from aaa.tools.tool import ToolRegistry
 
 if TYPE_CHECKING:
@@ -48,7 +56,19 @@ class CompiledServer(MCPToolServer):
     spec: MCPSpec
     report: list[str]
     hidden: list[str]
+    _upstreams: list[Upstream]
     owns_engine: bool = False  # the spec built this engine (runtime.engine): whoever serves it must enter and leave it
+
+    async def aclose(self) -> None:
+        """Close the connections to upstream MCP servers (and stop the processes this server launched)."""
+        ups, self._upstreams = getattr(self, "_upstreams", []), []
+        await asyncio.gather(*(u.aclose() for u in ups), return_exceptions=True)
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
 
 
 async def _object(ref: str, live: Mapping[str, Any] | None, where: str) -> Any:
@@ -156,7 +176,47 @@ async def acompile_spec(
     engine: Engine | None = None,
     approval: ApprovalCallback | None = None,
     allow_import: bool | None = None,
+    allow_subprocess: bool | None = None,
 ) -> CompiledServer:
+    """Build the server. If the spec has `mcp` sources the returned server holds live connections: close them with `await core.aclose()`
+    (or `async with core:`). If compilation fails, anything already connected is closed before the error propagates."""
+    holders: list[Upstream] = []
+    try:
+        core = await _compile(
+            spec,
+            holders,
+            live=live,
+            engine=engine,
+            approval=approval,
+            allow_import=allow_import,
+            allow_subprocess=allow_subprocess,
+        )
+    except BaseException:
+        await asyncio.gather(*(h.aclose() for h in holders), return_exceptions=True)
+        raise
+    core._upstreams = holders
+    return core
+
+
+async def _compile(
+    spec: MCPSpec,
+    holders: list[Upstream],
+    *,
+    live: Mapping[str, Any] | None,
+    engine: Engine | None,
+    approval: ApprovalCallback | None,
+    allow_import: bool | None,
+    allow_subprocess: bool | None,
+) -> CompiledServer:
+    if spec.launches_processes() and not (
+        subprocess_allowed() if allow_subprocess is None else allow_subprocess
+    ):
+        names = [
+            s.name for s in spec.sources if isinstance(s, McpSource) and s.transport == "stdio"
+        ]
+        raise SpecError(
+            f"upstream(s) {names} launch processes, but launching is disabled (AAA_MCP_ALLOW_SUBPROCESS=0 / --no-subprocess-sources)"
+        )
     allowed = import_allowed() if allow_import is None else allow_import
     if spec.imports_code() and not allowed:
         refs = [
@@ -209,6 +269,21 @@ async def acompile_spec(
                 )
             )
     for src in spec.sources:
+        if src.type == "mcp":
+            up = await start_upstream(src)
+            notes += up.notes
+            if up.upstream is not None:
+                holders.append(up.upstream)
+            for t in up.tools:
+                entries.append(
+                    Entry(
+                        with_name(t, src.prefix + t.name),
+                        f"mcp {src.name}",
+                        frozenset(src.tags),
+                        up.annotations.get(t.name),
+                    )
+                )
+            continue
         if src.type == "module":
             loaded = load_module(src)
             notes += loaded.notes

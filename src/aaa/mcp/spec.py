@@ -329,6 +329,88 @@ class OpenAPISource(_Source):
     )
 
 
+_HEADER_REF = r"^(?:env:[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9 _.-]{0,40}\$\{[A-Za-z_][A-Za-z0-9_]*\})$"
+
+
+class McpSource(_Source):
+    """The tools of ANOTHER MCP server, folded into this one.
+
+    `transport = "stdio"` launches `command` (an argument vector, never a shell) with a minimal environment: only `env` (literal,
+    non-secret values) and the variables named in `env_from`. `transport = "http"` connects to an https `url` through a transport that
+    resolves the host once, requires a public address and `allowed_hosts`, pins the connection and follows no redirects.
+
+    The upstream is untrusted input: its tools require approval unless it marks them read-only (`approval = "destructive"`), its
+    annotations are not trusted unless `trust_annotations`, its descriptions are capped, and its results are capped. One connection
+    serves every caller, so it is NOT tenant-isolated; tenant and user are never forwarded to it."""
+
+    type: Literal["mcp"]
+    name: str = Field(pattern=TOOL_NAME)  # a label for reports and errors
+    transport: Literal["stdio", "http"]
+    command: str | None = Field(default=None, max_length=500)
+    args: list[str] = Field(default_factory=list)
+    cwd: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)  # literal, NON-secret values
+    env_from: list[str] = Field(
+        default_factory=list
+    )  # variables passed through from this process by name
+    url: str | None = Field(default=None, max_length=500)
+    headers: dict[str, str] = Field(default_factory=dict)  # values: "env:NAME" or "Bearer ${NAME}"
+    allowed_hosts: list[str] = Field(default_factory=list)
+    allow_private_networks: bool = False
+    allow_insecure_loopback: bool = False  # plain http, to 127.0.0.1/localhost only
+    include: list[str] = Field(default_factory=lambda: ["*"])
+    exclude: list[str] = Field(default_factory=list)
+    approval: Literal["destructive", "always", "none"] = "destructive"
+    trust_annotations: bool = False
+    description_overrides: dict[str, str] = Field(default_factory=dict)
+    description_max_chars: int = Field(default=1000, ge=50, le=5000)
+    connect_timeout_s: float = Field(default=20.0, gt=0, le=300)
+    call_timeout_s: float = Field(default=60.0, gt=0, le=3600)
+    max_result_chars: int = Field(default=100_000, ge=1_000, le=5_000_000)
+    optional: bool = (
+        False  # if the upstream is down at startup: report it and carry on without its tools
+    )
+
+    @model_validator(mode="after")
+    def _check(self) -> McpSource:
+        import re
+
+        if self.transport == "stdio":
+            if not self.command:
+                raise ValueError("a stdio upstream needs a command")
+            if self.url or self.headers or self.allowed_hosts:
+                raise ValueError("url, headers and allowed_hosts apply to http upstreams only")
+        else:
+            if not self.url:
+                raise ValueError("an http upstream needs a url")
+            if self.command or self.args or self.env or self.env_from or self.cwd:
+                raise ValueError(
+                    "command, args, cwd, env and env_from apply to stdio upstreams only"
+                )
+            if not self.allowed_hosts:
+                raise ValueError(
+                    "an http upstream needs allowed_hosts: the only host(s) this server may call"
+                )
+        for k in [*self.env, *self.env_from]:
+            if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k):
+                raise ValueError(f"{k!r} is not a valid environment variable name")
+        for k, v in self.headers.items():
+            if not re.match(r"^[A-Za-z0-9-]{1,64}$", k) or k.lower() in (
+                "host",
+                "content-length",
+                "transfer-encoding",
+                "connection",
+            ):
+                raise ValueError(f"header {k!r} cannot be set")
+            if not re.match(_HEADER_REF, v):
+                raise ValueError(
+                    f"header {k!r}: give an environment reference ('env:NAME' or 'Bearer ${{NAME}}'), never the value itself"
+                )
+        if any(len(v) > 500 for v in self.env.values()):
+            raise ValueError("env values are limited to 500 characters; secrets belong in env_from")
+        return self
+
+
 class ModuleSource(_Source):
     """Public functions of a Python module as tools: schema from type hints, description from the docstring.
 
@@ -361,7 +443,8 @@ class LiveSource(_Source):
 
 
 Source = Annotated[
-    ObjectsSource | ModuleSource | OpenAPISource | LiveSource, Field(discriminator="type")
+    ObjectsSource | ModuleSource | OpenAPISource | McpSource | LiveSource,
+    Field(discriminator="type"),
 ]
 
 
@@ -377,6 +460,10 @@ class MCPSpec(_M):
     resources: list[ResourceSpec] = Field(default_factory=list)
     prompts: list[PromptSpec] = Field(default_factory=list)
     runtime: RuntimeSpec = Field(default_factory=RuntimeSpec)
+
+    def launches_processes(self) -> bool:
+        """Whether serving this spec starts a subprocess (a stdio upstream): see `AAA_MCP_ALLOW_SUBPROCESS`."""
+        return any(isinstance(s, McpSource) and s.transport == "stdio" for s in self.sources)
 
     def imports_code(self) -> bool:
         """Whether compiling this spec imports modules (and so runs code): see the kill-switch in `aaa.mcp.compile`."""
@@ -401,6 +488,7 @@ __all__ = [
     "LimitsSpec",
     "LiveSource",
     "MCPSpec",
+    "McpSource",
     "MemoryResource",
     "ModuleSource",
     "ObjectsSource",

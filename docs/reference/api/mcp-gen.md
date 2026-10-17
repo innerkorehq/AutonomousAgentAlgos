@@ -39,3 +39,7 @@ See [Generating an MCP server](../../guides/mcp-generator.md).
 ::: aaa.mcp.scaffold.check_project
 
 ::: aaa.mcp.scaffold.update_project
+
+::: aaa.mcp.spec.McpSource
+
+::: aaa.mcp.compile.CompiledServer

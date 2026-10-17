@@ -64,6 +64,11 @@ def add_arguments(mc: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
         p.add_argument(
             "--no-import-sources", action="store_true", help="refuse any source that imports code"
         )
+        p.add_argument(
+            "--no-subprocess-sources",
+            action="store_true",
+            help="refuse any upstream MCP server that this one would launch",
+        )
 
     def project(p: argparse.ArgumentParser) -> None:
         p.add_argument("--name", help="project name (lowercase letters, digits, '-', '_')")
@@ -329,16 +334,22 @@ async def run(a: argparse.Namespace) -> int:
                 f"ok: configuration is valid ({len(spec.sources)} source(s); nothing was imported)"
             )
             return 0
-        core = await acompile_spec(spec, allow_import=False if a.no_import_sources else None)
+        core = await acompile_spec(
+            spec,
+            allow_import=False if a.no_import_sources else None,
+            allow_subprocess=False if a.no_subprocess_sources else None,
+        )
     except SpecError as e:
         return _fail(str(e))
     if a.sub == "inspect":
         print(json.dumps(describe(core), indent=2, ensure_ascii=False))
+        await core.aclose()
         return 0
     if a.sub == "check":
         print("ok: configuration is valid")
         for line in core.report:
             print(f"  {line}")
+        await core.aclose()
         return 0
     for line in core.report:  # stderr: stdout is the protocol
         print(f"aaa mcp: {line}", file=sys.stderr)

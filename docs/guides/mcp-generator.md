@@ -2,7 +2,7 @@
 
 Instead of writing a server in Python, describe the one you want. `aaa.mcp` compiles a **configuration** (a file, flags, environment variables or the Python API) into a running MCP server: it chooses which tools to expose, how they are named and described, which hints clients get, and whether results are structured. The same description serves over stdio (`aaa mcp serve`) and over HTTP behind [`aaa-server`](../server/index.md).
 
-This page covers: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules and OpenAPI documents as tools, resources and prompts, the Python builder and the command line. The [threat model](../security/mcp-generator.md) covers every source.
+This page covers: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules, OpenAPI documents and other MCP servers as tools, resources and prompts, the Python builder and the command line. The [threat model](../security/mcp-generator.md) covers every source.
 
 ```python
 --8<-- "examples/mcp_generated.py"
@@ -63,6 +63,40 @@ requires_approval = false        # explicitly lift an approval requirement
 **Hints.** Without overrides, clients get what the tool already says: an approval-gated tool is `destructiveHint`, a tool with `delivery="at_least_once"` is `idempotentHint`; nothing else is claimed. `annotations` in an override *replace* those. Hints are advice to clients; the server enforces none of them.
 
 **Structured output.** A tool whose return type is a pydantic model, `TypedDict` or dataclass advertises an `outputSchema`, and a successful result carries `structuredContent` (validated against the schema; a result that does not conform is reported as an error, not sent) plus the same JSON as text. A structure that would be cut short by `max_result_chars` is not sent at all, only the truncated text. Other return types (strings, lists, numbers) have no output schema. `SchemaTool` accepts an explicit `output_schema=`, and an override can set one.
+
+## Other MCP servers as a source
+
+Fold the tools of existing MCP servers into the one you serve, so a client connects once and sees everything.
+
+```toml
+[[sources]]
+type = "mcp"
+name = "notes"                 # a label for reports and errors
+transport = "stdio"
+command = "uvx"
+args = ["mcp-server-notes"]    # an argument vector: there is no shell
+env = { NOTES_REGION = "eu" }  # literal, non-secret values
+env_from = ["NOTES_TOKEN"]     # variables passed through BY NAME; the child inherits nothing else
+prefix = "notes_"
+include = ["search_*", "get_*"]
+approval = "destructive"       # destructive | always | none
+trust_annotations = false      # when true, the upstream's read-only hints decide what needs approval
+
+[[sources]]
+type = "mcp"
+name = "crm"
+transport = "http"
+url = "https://mcp.crm.example.com/mcp"
+allowed_hosts = ["mcp.crm.example.com"]     # mandatory
+headers = { Authorization = "Bearer ${CRM_TOKEN}" }   # an environment reference, never the value
+optional = true                # if it is down at startup: say so and carry on without its tools
+```
+
+- **The upstream is untrusted input.** By default none of its tools are offered: without `trust_annotations` every tool is treated as potentially destructive and requires approval (so it stays hidden). Set `trust_annotations = true` to offer the tools the upstream marks read-only, or `approval = "none"` to offer everything (you are then trusting the upstream completely). Descriptions are capped and can be replaced (`description_overrides`), results are capped (`max_result_chars`), every call has a timeout (`call_timeout_s`), and `aaa mcp inspect` shows what the model will see.
+- **A subprocess gets a minimal environment**: only `env` and the variables named in `env_from` (plus the small safe set the MCP SDK always adds). A secret in this process's environment is not inherited by accident. `AAA_MCP_ALLOW_SUBPROCESS=0` / `--no-subprocess-sources` turns every stdio upstream into a startup error before anything is spawned, and a configuration that launches a process is refused when it is writable by everyone.
+- **An HTTP upstream goes through the same protection as an OpenAPI call**: https only (plain http solely to loopback with `allow_insecure_loopback`), the host must be in `allowed_hosts`, the host is resolved once, every address must be public (`allow_private_networks` to opt out, reported), the connection is pinned to the checked address, and redirects are never followed. This holds on both SDK generations (the 1.x SDK uses `httpx`, the 2.x SDK its own HTTP stack).
+- **Lifecycle.** Connections are opened at startup (a failure is an error, or a note when `optional`) and the tool list is read once: restart to pick up upstream changes. A dead upstream gives a short generic tool error while the rest of the server keeps serving. `await core.aclose()` (or `async with core:`) disconnects and stops launched processes; `aaa mcp serve` does it for you, and a failed compile closes whatever it had already opened.
+- **One connection serves every caller, so an upstream is not tenant-isolated**, and tenant and user are never forwarded to it. Use an upstream only if it is safe to share.
 
 ## OpenAPI documents as tools
 
