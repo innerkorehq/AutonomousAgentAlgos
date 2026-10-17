@@ -28,9 +28,9 @@ import json
 import logging
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from aaa.mcp.model import MCPAnnotations, MCPCallResult, MCPToolDef, MCPToolMeta
 from aaa.runtime.budget import Budget
 from aaa.tools.tool import Tool, ToolArgsError, ToolContext, ToolError, ToolRegistry
 
@@ -42,20 +42,6 @@ log = logging.getLogger("aaa.mcp.server")
 RUN_AGENT = "run_agent"
 ApprovalCallback = Callable[[str, dict[str, Any], str | None], Awaitable[bool]]
 """`(tool name, arguments, tenant) -> allowed`. Called for every call to a tool that requires approval."""
-
-
-@dataclass(frozen=True)
-class MCPToolDef:
-    name: str
-    description: str
-    input_schema: dict[str, Any]
-    read_only: bool = False
-
-
-@dataclass(frozen=True)
-class MCPCallResult:
-    text: str
-    is_error: bool = False
 
 
 class MCPToolServer:
@@ -72,6 +58,11 @@ class MCPToolServer:
         user: str | None = None,
         agent_budget: Budget | None = None,
         max_result_chars: int = 100_000,
+        title: str | None = None,
+        version: str = "0.1",
+        instructions: str | None = None,
+        tool_meta: Mapping[str, MCPToolMeta] | None = None,
+        structured_output: bool = False,
     ) -> None:
         if algorithms and engine is None:
             raise ValueError("algorithms= needs engine=")
@@ -81,6 +72,11 @@ class MCPToolServer:
         self.algorithms = dict(algorithms or {})
         self.approval, self.expose_approval_tools = approval, expose_approval_tools
         self.tenant, self.user, self.max_result_chars = tenant, user, max_result_chars
+        self.title, self.version, self.instructions = title, version, instructions
+        self.tool_meta = dict(tool_meta or {})
+        self.structured_output = (
+            structured_output  # send structuredContent for tools with an output schema
+        )
         self.agent_budget = agent_budget or Budget(
             max_steps=50, max_tokens=200_000, deadline_s=120.0
         )
@@ -91,7 +87,7 @@ class MCPToolServer:
 
     def list_tools(self) -> list[MCPToolDef]:
         out = [
-            MCPToolDef(t.name, t.description, t.parameters)
+            self._tool_def(t)
             for n in self.registry.names()
             if (t := self.registry.get(n)) is not None and self._exposed(t)
         ]
@@ -112,6 +108,25 @@ class MCPToolServer:
                 )
             )
         return out
+
+    def _output_schema(self, t: Tool) -> dict[str, Any] | None:
+        meta = self.tool_meta.get(t.name)
+        if meta is not None and meta.output_schema is not None:
+            return meta.output_schema
+        return t.output_schema if self.structured_output else None
+
+    def _tool_def(self, t: Tool) -> MCPToolDef:
+        meta = self.tool_meta.get(t.name) or MCPToolMeta()
+        ann = meta.annotations or _default_annotations(t)
+        return MCPToolDef(
+            t.name,
+            t.description,
+            t.parameters,
+            read_only=bool(ann and ann.read_only),
+            title=meta.title or (ann.title if ann else None),
+            annotations=ann,
+            output_schema=self._output_schema(t),
+        )
 
     # -- calling ---------------------------------------------------------------------------
     def _render(self, value: Any) -> str:
@@ -158,7 +173,7 @@ class MCPToolServer:
             meta={"user": user} if user else {},
         )
         try:
-            return MCPCallResult(self._render(await t.invoke(args, ctx)))
+            return self._result(t, await t.invoke(args, ctx))
         except ToolArgsError as e:
             return MCPCallResult(str(e), True)
         except ToolError as e:
@@ -166,6 +181,29 @@ class MCPToolServer:
         except Exception:
             log.exception("tool %s failed", name)
             return MCPCallResult(f"{name} failed", True)
+
+    def _result(self, t: Tool, value: Any) -> MCPCallResult:
+        schema = self._output_schema(t)
+        structured = None
+        if schema is not None and isinstance(value, dict):
+            problem = _violates(schema, value)
+            if problem:
+                log.error(
+                    "tool %s returned data that does not match its output schema: %s",
+                    t.name,
+                    problem,
+                )
+                return MCPCallResult(
+                    f"{t.name} returned data that does not match its output schema", True
+                )
+            structured = value
+        text = self._render(value)
+        if (
+            structured is not None
+            and len(json.dumps(structured, default=str)) > self.max_result_chars
+        ):
+            structured = None  # never send a structure that was cut short: text only, with its truncation marker
+        return MCPCallResult(text, False, structured)
 
     async def _run_agent(
         self, args: dict[str, Any], tenant: str, user: str | None
@@ -187,10 +225,41 @@ class MCPToolServer:
         return MCPCallResult(self._render(body), not out.ok)
 
 
+def _default_annotations(t: Tool) -> MCPAnnotations | None:
+    """Hints derivable from what the tool already says: approval-gated means potentially destructive, and a tool whose delivery
+    is `at_least_once` is safe to repeat (idempotent). Nothing is claimed about read-only-ness: only a config can say so."""
+    destructive = True if t.requires_approval else None
+    idempotent = True if t.delivery == "at_least_once" else None
+    if destructive is None and idempotent is None:
+        return None
+    return MCPAnnotations(destructive=destructive, idempotent=idempotent)
+
+
+def _violates(schema: dict[str, Any], value: Any) -> str | None:
+    try:
+        import jsonschema  # pyright: ignore[reportMissingModuleSource]
+    except (
+        ImportError
+    ):  # the mcp extra brings it; without it the value is trusted as the tool's own
+        return None
+    try:
+        jsonschema.validate(value, schema)
+    except jsonschema.ValidationError as e:
+        return e.message[:200]
+    except jsonschema.SchemaError as e:
+        return f"invalid output schema: {e.message[:120]}"
+    return None
+
+
 # -- binding to the official SDK ---------------------------------------------------------------
 def build_server(core: MCPToolServer) -> Any:
-    """An SDK server object (low-level `Server`) exposing `core`. Works with mcp 1.x and 2.x."""
+    """An SDK server object (low-level `Server`) exposing `core`. Works with mcp 1.x and 2.x.
+
+    The SDK's own types are built from the shared wire dictionaries (`aaa.mcp.wire`), so what a tool looks like is decided in one
+    place for stdio, the official client and the HTTP handler alike."""
     import mcp
+
+    from aaa.mcp import wire
 
     if hasattr(
         mcp, "Client"
@@ -198,30 +267,29 @@ def build_server(core: MCPToolServer) -> Any:
         import mcp_types as types
         from mcp.server.lowlevel import Server
 
-        def tool_of(d: MCPToolDef) -> Any:
-            return types.Tool(name=d.name, description=d.description, input_schema=d.input_schema)
-
         async def on_list(ctx: Any, params: Any) -> Any:
-            return types.ListToolsResult(tools=[tool_of(d) for d in core.list_tools()])
+            return types.ListToolsResult.model_validate(wire.tools_list_result(core))
 
         async def on_call(ctx: Any, params: Any) -> Any:
             r = await core.call(params.name, params.arguments)
-            return types.CallToolResult(
-                content=[types.TextContent(type="text", text=r.text)], is_error=r.is_error
-            )
+            return types.CallToolResult.model_validate(wire.call_result_to_wire(r))
 
-        return Server(core.name, on_list_tools=on_list, on_call_tool=on_call)
+        return Server(
+            core.name,
+            version=core.version,
+            title=core.title,
+            instructions=core.instructions,
+            on_list_tools=on_list,
+            on_call_tool=on_call,
+        )
     from mcp import types  # mcp 1.x
     from mcp.server.lowlevel import Server
 
-    server = Server(core.name)
+    server = Server(core.name, version=core.version, instructions=core.instructions)
 
     @server.list_tools()
     async def _list() -> list[Any]:
-        return [
-            types.Tool(name=d.name, description=d.description, inputSchema=d.input_schema)
-            for d in core.list_tools()
-        ]
+        return [types.Tool.model_validate(w) for w in wire.tools_list_result(core)["tools"]]
 
     @server.call_tool(validate_input=False)
     async def _call(name: str, arguments: dict[str, Any] | None) -> Any:
@@ -230,7 +298,8 @@ def build_server(core: MCPToolServer) -> Any:
             raise ToolError(
                 r.text
             )  # the SDK turns an exception into an isError result carrying this text
-        return [types.TextContent(type="text", text=r.text)]
+        content = [types.TextContent(type="text", text=r.text)]
+        return (content, r.structured) if r.structured is not None else content
 
     return server
 
@@ -247,8 +316,10 @@ async def serve_stdio(core: MCPToolServer) -> None:
 __all__ = [
     "RUN_AGENT",
     "ApprovalCallback",
+    "MCPAnnotations",
     "MCPCallResult",
     "MCPToolDef",
+    "MCPToolMeta",
     "MCPToolServer",
     "build_server",
     "serve_stdio",

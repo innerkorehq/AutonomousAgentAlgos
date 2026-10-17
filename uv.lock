@@ -446,6 +446,9 @@ litellm = [
 mcp = [
     { name = "mcp" },
 ]
+mcp-config = [
+    { name = "pyyaml" },
+]
 mem0 = [
     { name = "mem0ai" },
 ]
@@ -522,11 +525,12 @@ requires-dist = [
     { name = "pyarrow", marker = "extra == 'lancedb'" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pypdf", marker = "extra == 'pdf'", specifier = ">=4" },
+    { name = "pyyaml", marker = "extra == 'mcp-config'", specifier = ">=6" },
     { name = "qdrant-client", marker = "extra == 'qdrant'", specifier = ">=1.9" },
     { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0" },
     { name = "sqlite-vec", marker = "extra == 'sqlitevec'", specifier = ">=0.1.6" },
 ]
-provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgraph", "langmem", "otel", "langfuse", "langsmith", "phoenix", "autoevals", "pgvector", "qdrant", "sqlitevec", "lancedb", "chroma", "pinecone", "bedrock", "pdf", "mcp", "docs"]
+provides-extras = ["litellm", "postgres", "redis", "mem0", "graphiti", "langgraph", "langmem", "otel", "langfuse", "langsmith", "phoenix", "autoevals", "pgvector", "qdrant", "sqlitevec", "lancedb", "chroma", "pinecone", "bedrock", "pdf", "mcp-config", "mcp", "docs"]
 
 [package.metadata.requires-dev]
 dev = [

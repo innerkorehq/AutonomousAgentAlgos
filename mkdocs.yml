@@ -83,6 +83,7 @@ nav:
       - Images, audio and files: guides/multimodal.md
       - Built-in tools and the code sandbox: guides/builtin-tools.md
       - MCP servers: guides/mcp.md
+      - Generating an MCP server: guides/mcp-generator.md
       - Human approval: guides/human-approval.md
       - Streaming: guides/streaming.md
       - Algorithms:
@@ -137,6 +138,7 @@ nav:
           - Sessions: reference/api/session.md
           - Context: reference/api/context.md
           - MCP: reference/api/mcp.md
+          - MCP generator: reference/api/mcp-gen.md
           - Memory: reference/api/memory.md
           - Observability: reference/api/observe.md
           - Evals: reference/api/eval.md

@@ -128,6 +128,11 @@ EXPECTED = {
         "red team: attack success 90%, false positives 0%",
         "conversation: 2 turns; contains help = True",
     ],
+    "mcp_generated.py": [
+        "offers: desk_forecast | Weather forecast | {'readOnlyHint': True, 'openWorldHint': True}",
+        "hidden (need approval): ['desk_erase_history']",
+        'structured result: {"city": "Oslo", "celsius": 21.5}',
+    ],
     "mcp_server.py": [
         "offered: ['add', 'lookup', 'run_agent']",
         "add: 5",

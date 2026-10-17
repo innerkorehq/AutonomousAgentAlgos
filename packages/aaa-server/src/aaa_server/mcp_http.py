@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from aaa.mcp import wire
 from aaa.mcp.server import MCPToolServer
 
 SUPPORTED = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
@@ -34,31 +35,16 @@ async def handle(
         return _error(id_, INVALID_REQUEST, "malformed request")
     if method == "initialize":
         asked = params.get("protocolVersion")
-        return {
-            "jsonrpc": "2.0",
-            "id": id_,
-            "result": {
-                "protocolVersion": asked if asked in SUPPORTED else SUPPORTED[0],
-                "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": core.name, "version": "0.1"},
-            },
-        }
+        version = asked if asked in SUPPORTED else SUPPORTED[0]
+        return {"jsonrpc": "2.0", "id": id_, "result": wire.initialize_result(core, version)}
     if method == "ping":
         return {"jsonrpc": "2.0", "id": id_, "result": {}}
     if method == "tools/list":
-        tools = [
-            {"name": t.name, "description": t.description, "inputSchema": t.input_schema}
-            for t in core.list_tools()
-        ]
-        return {"jsonrpc": "2.0", "id": id_, "result": {"tools": tools}}
+        return {"jsonrpc": "2.0", "id": id_, "result": wire.tools_list_result(core)}
     if method == "tools/call":
         name, args = params.get("name"), params.get("arguments") or {}
         if not isinstance(name, str) or not isinstance(args, dict):
             return _error(id_, INVALID_PARAMS, "tools/call needs a name and an arguments object")
         r = await core.call(name, args, tenant=tenant, user=user)
-        return {
-            "jsonrpc": "2.0",
-            "id": id_,
-            "result": {"content": [{"type": "text", "text": r.text}], "isError": r.is_error},
-        }
+        return {"jsonrpc": "2.0", "id": id_, "result": wire.call_result_to_wire(r)}
     return _error(id_, METHOD_NOT_FOUND, f"method {method!r} is not supported")

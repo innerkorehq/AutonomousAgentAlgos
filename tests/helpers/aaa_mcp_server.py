@@ -35,3 +35,40 @@ def registry() -> ToolRegistry:
 
 def build() -> MCPToolServer:
     return MCPToolServer(registry())
+
+
+# -- tools for the generator tests ---------------------------------------------------------------
+from pydantic import BaseModel
+
+
+class Point(BaseModel):
+    x: float
+    y: float
+
+
+@tool(delivery="at_least_once")
+def locate(name: str) -> Point:
+    """Find a place (its return type is an object, so it has an output schema)."""
+    return Point(x=1.5, y=2.5)
+
+
+@tool
+def broken_shape() -> Point:
+    """Claims to return a Point but returns something else."""
+    return {"x": "not a number"}  # type: ignore[return-value]
+
+
+@tool
+def shout(text: str) -> str:
+    """Upper-case some text."""
+    return text.upper()
+
+
+@tool(requires_approval=True)
+def delete_all() -> str:
+    """Delete everything."""
+    return "gone"
+
+
+def rich_registry() -> ToolRegistry:
+    return ToolRegistry([add, locate, broken_shape, shout, delete_all])

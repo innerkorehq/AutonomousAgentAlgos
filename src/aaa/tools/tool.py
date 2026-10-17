@@ -50,6 +50,29 @@ def _strip_titles(schema: Any) -> Any:
     return schema
 
 
+def _output_schema_of(ret: Any) -> dict[str, Any] | None:
+    """A JSON schema for a tool's return type, when it is an OBJECT type (a pydantic model, TypedDict or dataclass): that is what
+    MCP structured output can carry. Anything else (str, list, int, None, unions) has no output schema."""
+    import dataclasses
+    import typing
+
+    if ret is None or ret is type(None):
+        return None
+    try:
+        if isinstance(ret, type) and issubclass(ret, BaseModel):
+            schema = ret.model_json_schema()
+        elif typing.is_typeddict(ret) or (isinstance(ret, type) and dataclasses.is_dataclass(ret)):
+            from pydantic import TypeAdapter
+
+            schema = TypeAdapter(ret).json_schema()
+        else:
+            return None
+    except Exception:  # noqa: BLE001 - a return type pydantic cannot describe simply has no output schema
+        return None
+    schema = _strip_titles(schema)
+    return schema if schema.get("type") == "object" else None
+
+
 class Tool:
     def __init__(
         self,
@@ -87,6 +110,7 @@ class Tool:
         )
         schema = _strip_titles(self.input_model.model_json_schema())
         self.parameters = schema
+        self.output_schema: dict[str, Any] | None = _output_schema_of(hints.get("return"))
 
     @property
     def delivery(self) -> str | None:
@@ -167,12 +191,14 @@ class SchemaTool(Tool):
         name: str,
         description: str,
         parameters: dict[str, Any],
+        output_schema: dict[str, Any] | None = None,
         **opts: Any,
     ) -> None:
         async def _unused() -> None: ...
 
         super().__init__(_unused, name=name, description=description, **opts)
         self.fn = call
+        self.output_schema = _strip_titles(output_schema) if output_schema else None
         self.parameters = _strip_titles(parameters or {"type": "object", "properties": {}})
 
     async def invoke(self, arguments: dict[str, Any], ctx: ToolContext | None = None) -> Any:

@@ -314,7 +314,7 @@ jobs:
         run: uv run pytest -v -p no:cacheprovider tests/server
       - name: MCP and A2A against the official SDK clients
         run: |
-          uv pip install a2a-sdk "mcp>=1.12,<3"
+          uv pip install a2a-sdk "mcp>=1.21.2,<3"
           uv run --no-sync pytest -v -p no:cacheprovider tests/server/test_a2a.py tests/server/test_mcp_http.py tests/unit/test_mcp_server.py
       - name: Build both packages and check their metadata
         run: |
@@ -389,16 +389,18 @@ jobs:
           enable-cache: true
       - name: Locked versions
         run: |
-          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem --extra mcp --extra otel
-          uv run pytest -v -p no:cacheprovider tests/unit/test_otel.py tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/server/test_mcp_http.py tests/unit/test_examples.py -k "not cluster"
+          uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem --extra mcp --extra mcp-config --extra otel
+          uv run pytest -v -p no:cacheprovider tests/unit/test_otel.py tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/unit/test_mcp_gen.py tests/server/test_mcp_http.py tests/unit/test_examples.py -k "not cluster"
       - name: OpenAI SDK types (conformance of the Responses client; not a runtime dependency)
         run: |
           uv pip install openai
           uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_openai_conformance.py
-      - name: MCP SDK 1.x (the lock resolves 2.x; both are supported)
+      - name: MCP SDK 1.x, newest and the declared floor (the lock resolves 2.x; all are supported)
         run: |
-          uv pip install "mcp<2"
-          uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_mcp.py tests/unit/test_mcp_server.py
+          for spec in "mcp<2" "mcp==1.21.2"; do
+            uv pip install "$spec"
+            uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/unit/test_mcp_gen.py
+          done
       - name: Newest releases (scheduled and manual runs only)
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         run: |
