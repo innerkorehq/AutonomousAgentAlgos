@@ -88,6 +88,42 @@ class MCPServerBuilder:
         )
         return self
 
+    def add_module(
+        self,
+        module: str,
+        *,
+        allow: list[str] | None = None,
+        exclude: list[str] | None = None,
+        path: str | os.PathLike[str] | None = None,
+        strict: bool = True,
+        default_approval: bool = True,
+        no_approval: list[str] | None = None,
+        read_only: list[str] | None = None,
+        tags: list[str] | None = None,
+        prefix: str = "",
+    ) -> Self:
+        """Expose a module's functions (its `__all__`, or `allow`). They require approval, and so stay hidden, unless listed in
+        `no_approval` / `read_only`. See the generator guide for the rules."""
+        self._data.setdefault("sources", []).append(
+            {
+                "type": "module",
+                "module": module,
+                "allow": allow or [],
+                "exclude": exclude or [],
+                "path": None if path is None else str(path),
+                "strict": strict,
+                "default_approval": default_approval,
+                "no_approval": no_approval or [],
+                "read_only": read_only or [],
+                "tags": tags or [],
+                "prefix": prefix,
+            }
+        )
+        self._data["sources"][-1] = {
+            k: v for k, v in self._data["sources"][-1].items() if v is not None
+        }
+        return self
+
     # -- the tool policy -------------------------------------------------------------------
     def _policy(self, key: str, values: list[str]) -> Self:
         self._data.setdefault("tools", {}).setdefault(key, []).extend(values)

@@ -2,7 +2,7 @@
 
 Instead of writing a server in Python, describe the one you want. `aaa.mcp` compiles a **configuration** (a file, flags, environment variables or the Python API) into a running MCP server: it chooses which tools to expose, how they are named and described, which hints clients get, and whether results are structured. The same description serves over stdio (`aaa mcp serve`) and over HTTP behind [`aaa-server`](../server/index.md).
 
-This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, resources and prompts, the Python builder and the command line. OpenAPI and Python-module sources and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
+This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules as tools, resources and prompts, the Python builder and the command line. OpenAPI sources and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
 
 ```python
 --8<-- "examples/mcp_generated.py"
@@ -63,6 +63,37 @@ requires_approval = false        # explicitly lift an approval requirement
 **Hints.** Without overrides, clients get what the tool already says: an approval-gated tool is `destructiveHint`, a tool with `delivery="at_least_once"` is `idempotentHint`; nothing else is claimed. `annotations` in an override *replace* those. Hints are advice to clients; the server enforces none of them.
 
 **Structured output.** A tool whose return type is a pydantic model, `TypedDict` or dataclass advertises an `outputSchema`, and a successful result carries `structuredContent` (validated against the schema; a result that does not conform is reported as an error, not sent) plus the same JSON as text. A structure that would be cut short by `max_result_chars` is not sent at all, only the truncated text. Other return types (strings, lists, numbers) have no output schema. `SchemaTool` accepts an explicit `output_schema=`, and an override can set one.
+
+## Python modules as tools
+
+```toml
+[[sources]]
+type = "module"
+module = "myapp.text_tools"
+path = "/srv/myapp"            # optional: a directory added to sys.path (it must exist and not be world-writable)
+allow = ["word_count", "reverse"]   # optional: otherwise the module's __all__ is used; with neither, it is an error
+no_approval = ["word_count"]   # run without approval; everything else in the module still requires it
+read_only = ["reverse"]        # also tells clients it only reads (and needs no approval)
+strict = true                  # every parameter needs a type hint
+```
+
+```python
+--8<-- "examples/mcp_modules.py"
+```
+
+```text
+tool: word_count | Count the words in a text. | ['text']
+tool: reverse | Reverse a text. | ['text']
+description of 'text': the text to count
+hidden (need approval): ['delete_file']
+word_count -> 3
+```
+
+- **Exposure is an explicit list.** `allow`, or the module's own `__all__`: there is no "everything public" default. Only functions defined in that module are exposed (a re-export in `__all__` is skipped with a note; list it in `allow` to expose it). `_private` names, classes, lambdas, generators and `*args/**kwargs` are refused with a reason.
+- **The type hints are the argument schema**, so callers are validated against them (unknown arguments are rejected). `strict = true` (the default) refuses unannotated parameters; `strict = false` types them as `Any` and says so in `check`. A pydantic-model, `TypedDict` or dataclass return type becomes the output schema; a parameter named `ctx: ToolContext` receives the caller's tenant and user.
+- **Descriptions come from the docstring**: the first paragraph, and per-parameter text from a Google-style `Args:` section (other docstring styles keep the summary only).
+- **Approval is the default.** Module functions are hidden until you say which are safe (`no_approval`, `read_only`) or turn the default off (`default_approval = false`) for a module you fully trust. Naming heuristics (`delete_*`) are deliberately not used: the allow-list and the approval default are the controls.
+- **Importing runs the module's code.** Introspection reads signatures and docstrings and never calls a function, but the import itself executes top-level code. That is why `AAA_MCP_ALLOW_IMPORT=0` / `--no-import-sources` stops every module source before anything is imported, and why a configuration naming modules is refused when it is writable by everyone.
 
 ## Algorithms as tools
 

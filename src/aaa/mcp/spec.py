@@ -265,6 +265,30 @@ class ObjectsSource(_Source):
     ref: str = Field(pattern=r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
 
 
+class ModuleSource(_Source):
+    """Public functions of a Python module as tools: schema from type hints, description from the docstring.
+
+    Importing a module runs its top-level code, so this is as trusted as `objects`, and the list of what is exposed is explicit:
+    `allow` names functions, or the module's `__all__` is used; a module with neither is an error. Only functions DEFINED in the
+    module are exposed (re-exports need `allow`), never `_private` names, classes, generators, lambdas or `*args/**kwargs`.
+    Nothing is ever called while the module is inspected.
+
+    Module tools REQUIRE APPROVAL by default (so they stay hidden): list the harmless ones in `no_approval`, or in `read_only`
+    (which also tells clients they only read)."""
+
+    type: Literal["module"]
+    module: str = Field(pattern=r"^[A-Za-z_][\w]*(\.[A-Za-z_][\w]*)*$", max_length=200)
+    allow: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+    path: str | None = (
+        None  # a directory to add to sys.path so the module can be found (explicit, never guessed)
+    )
+    strict: bool = True  # every parameter needs a type hint; false types the unannotated ones as Any, with a warning
+    default_approval: bool = True
+    no_approval: list[str] = Field(default_factory=list)
+    read_only: list[str] = Field(default_factory=list)
+
+
 class LiveSource(_Source):
     """Tools passed to `compile_spec(..., live={key: ...})` from Python. Not loadable from a file (there is nothing to load)."""
 
@@ -272,7 +296,7 @@ class LiveSource(_Source):
     key: str = Field(min_length=1, max_length=80)
 
 
-Source = Annotated[ObjectsSource | LiveSource, Field(discriminator="type")]
+Source = Annotated[ObjectsSource | ModuleSource | LiveSource, Field(discriminator="type")]
 
 
 class MCPSpec(_M):
@@ -291,7 +315,7 @@ class MCPSpec(_M):
     def imports_code(self) -> bool:
         """Whether compiling this spec imports modules (and so runs code): see the kill-switch in `aaa.mcp.compile`."""
         return (
-            any(s.type == "objects" for s in self.sources)
+            any(s.type in ("objects", "module") for s in self.sources)
             or self.runtime.engine is not None
             or any(":" in a.algorithm for a in self.agents)
             or any(
@@ -311,6 +335,7 @@ __all__ = [
     "LiveSource",
     "MCPSpec",
     "MemoryResource",
+    "ModuleSource",
     "ObjectsSource",
     "PromptArg",
     "PromptMessage",

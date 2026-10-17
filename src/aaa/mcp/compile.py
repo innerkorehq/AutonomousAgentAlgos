@@ -16,12 +16,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from aaa.mcp.config import SpecError
-from aaa.mcp.filters import Entry, rename, select
+from aaa.mcp.filters import Entry, rename, select, with_name
 from aaa.mcp.model import MCPAnnotations, MCPToolMeta
 from aaa.mcp.server import ApprovalCallback, MCPToolServer
 from aaa.mcp.sources.agents import AgentTool, check_spec
 from aaa.mcp.sources.objects import load_ref, normalize, resolve_ref
 from aaa.mcp.sources.prompts import PromptDef
+from aaa.mcp.sources.pymodule import load_module
 from aaa.mcp.sources.resources import (
     FilesProvider,
     IndexProvider,
@@ -29,7 +30,7 @@ from aaa.mcp.sources.resources import (
     ResourceSet,
     StaticProvider,
 )
-from aaa.mcp.spec import AnnotationsSpec, MCPSpec, ToolOverride
+from aaa.mcp.spec import AnnotationsSpec, MCPSpec, ModuleSource, ObjectsSource, ToolOverride
 from aaa.tools.tool import ToolRegistry
 
 if TYPE_CHECKING:
@@ -144,7 +145,7 @@ def _override(entry: Entry, o: ToolOverride) -> Entry:
         tool.description = o.description
     if o.requires_approval is not None:
         tool.requires_approval = o.requires_approval
-    return Entry(tool, entry.origin, entry.tags)
+    return Entry(tool, entry.origin, entry.tags, entry.annotations)
 
 
 async def acompile_spec(
@@ -157,7 +158,11 @@ async def acompile_spec(
 ) -> CompiledServer:
     allowed = import_allowed() if allow_import is None else allow_import
     if spec.imports_code() and not allowed:
-        refs = [s.ref for s in spec.sources if s.type == "objects"]
+        refs = [
+            s.ref if isinstance(s, ObjectsSource) else s.module
+            for s in spec.sources
+            if isinstance(s, ObjectsSource | ModuleSource)
+        ]
         raise SpecError(
             f"sources {refs} import code, but importing is disabled (AAA_MCP_ALLOW_IMPORT=0 / --no-import-sources)"
         )
@@ -171,7 +176,7 @@ async def acompile_spec(
                 f"runtime.engine: {spec.runtime.engine} is not an Engine (got {type(engine).__name__})"
             )
         owns_engine = True
-    agent_ann: dict[str, MCPAnnotations] = {}  # by origin, because tools may be renamed afterwards
+    notes: list[str] = []
     entries: list[Entry] = []
     if spec.agents:
         if engine is None:
@@ -195,11 +200,27 @@ async def acompile_spec(
                     f"agents.{ag.name}: {ag.algorithm!r} is not an algorithm (got {type(algo).__name__})"
                 )
             entries.append(
-                Entry(AgentTool(ag, algo, engine, gate), f"agent {ag.name}", frozenset(ag.tags))
+                Entry(
+                    AgentTool(ag, algo, engine, gate),
+                    f"agent {ag.name}",
+                    frozenset(ag.tags),
+                    _annotations(ag.annotations),
+                )
             )
-            if ag.annotations is not None:
-                agent_ann[f"agent {ag.name}"] = _annotations(ag.annotations) or MCPAnnotations()
     for src in spec.sources:
+        if src.type == "module":
+            loaded = load_module(src)
+            notes += loaded.notes
+            for t in loaded.tools:
+                entries.append(
+                    Entry(
+                        with_name(t, src.prefix + t.name),
+                        f"module {src.module}",
+                        frozenset(src.tags),
+                        loaded.annotations.get(t.name),
+                    )
+                )
+            continue
         if src.type == "objects":
             tools, origin = await load_ref(src.ref), f"objects {src.ref}"
         else:
@@ -208,8 +229,6 @@ async def acompile_spec(
                     f"sources: no live object was given for key {src.key!r} (compile_spec(..., live={{...}}))"
                 )
             tools, origin = normalize(live[src.key], f"live {src.key}"), f"live {src.key}"
-        from aaa.mcp.filters import with_name
-
         for t in tools:
             entries.append(Entry(with_name(t, src.prefix + t.name), origin, frozenset(src.tags)))
 
@@ -220,9 +239,9 @@ async def acompile_spec(
             f"tools.overrides: no exposed tool is named {sorted(unknown)} (overrides use the final exposed name)"
         )
     meta: dict[str, MCPToolMeta] = {
-        e.tool.name: MCPToolMeta(None, agent_ann[e.origin], None)
+        e.tool.name: MCPToolMeta(None, e.annotations, None)
         for e in chosen
-        if e.origin in agent_ann
+        if e.annotations is not None
     }
     final: list[Entry] = []
     for e in chosen:
@@ -267,7 +286,10 @@ async def acompile_spec(
     core.owns_engine = owns_engine
     offered = {t.name for t in core.list_tools()}
     core.hidden = [e.tool.name for e in final if e.tool.name not in offered]
-    core.report = [f"{len(offered)} tool(s) exposed from {len(spec.sources)} source(s)"]
+    core.report = [
+        f"{len(offered)} tool(s) exposed from {len(spec.sources)} source(s)",
+        *(f"note: {n}" for n in notes),
+    ]
     if resources:
         core.report.append(
             f"{len(resources.providers)} resource provider(s): "

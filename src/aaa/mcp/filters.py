@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 
 from aaa.mcp.config import SpecError
+from aaa.mcp.model import MCPAnnotations
 from aaa.mcp.spec import TOOL_NAME, ToolsSpec
 from aaa.tools.tool import Tool
 
@@ -17,6 +18,9 @@ class Entry:
     tool: Tool
     origin: str  # where it came from, for error messages ("objects myapp.tools:registry")
     tags: frozenset[str] = field(default_factory=frozenset)
+    annotations: MCPAnnotations | None = (
+        None  # hints the source itself knows (a module's read-only functions)
+    )
 
 
 def sanitize(name: str) -> str:
@@ -70,5 +74,5 @@ def rename(entries: list[Entry], policy: ToolsSpec) -> list[Entry]:
                 "give one a different name with tools.rename or a source prefix"
             )
         seen[name] = e.origin
-        out.append(Entry(with_name(e.tool, name), e.origin, e.tags))
+        out.append(Entry(with_name(e.tool, name), e.origin, e.tags, e.annotations))
     return out
