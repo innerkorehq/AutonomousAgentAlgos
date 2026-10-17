@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from aaa.mcp.config import SpecError
@@ -20,6 +21,14 @@ from aaa.mcp.model import MCPAnnotations, MCPToolMeta
 from aaa.mcp.server import ApprovalCallback, MCPToolServer
 from aaa.mcp.sources.agents import AgentTool, check_spec
 from aaa.mcp.sources.objects import load_ref, normalize, resolve_ref
+from aaa.mcp.sources.prompts import PromptDef
+from aaa.mcp.sources.resources import (
+    FilesProvider,
+    IndexProvider,
+    MemoryProvider,
+    ResourceSet,
+    StaticProvider,
+)
 from aaa.mcp.spec import AnnotationsSpec, MCPSpec, ToolOverride
 from aaa.tools.tool import ToolRegistry
 
@@ -38,6 +47,87 @@ class CompiledServer(MCPToolServer):
     report: list[str]
     hidden: list[str]
     owns_engine: bool = False  # the spec built this engine (runtime.engine): whoever serves it must enter and leave it
+
+
+async def _object(ref: str, live: Mapping[str, Any] | None, where: str) -> Any:
+    if ":" in ref:
+        return await resolve_ref(ref)
+    if live is not None and ref in live:
+        return live[ref]
+    raise SpecError(f"{where}: no live object {ref!r} (use module:attribute or pass live={{...}})")
+
+
+async def _resources(spec: MCPSpec, live: Mapping[str, Any] | None) -> ResourceSet | None:
+    if not spec.resources:
+        return None
+    lim = spec.limits
+    providers: list[Any] = []
+    for r in spec.resources:
+        if r.type == "static":
+            providers.append(
+                StaticProvider(
+                    r.name,
+                    r.text,
+                    mime_type=r.mime_type,
+                    title=r.title,
+                    description=r.description,
+                    limit=lim.max_resource_bytes,
+                )
+            )
+        elif r.type == "files":
+            if not Path(r.root).is_dir():
+                raise SpecError(f"resources.{r.name}: root {r.root!r} is not a directory")
+            providers.append(
+                FilesProvider(
+                    r.name,
+                    r.root,
+                    pattern=r.pattern,
+                    shared=r.shared,
+                    allow_hidden=r.allow_hidden,
+                    mime_type=r.mime_type,
+                    title=r.title,
+                    description=r.description,
+                    limit=lim.max_resource_bytes,
+                    max_listed=lim.max_resources_listed,
+                )
+            )
+        elif r.type == "index":
+            obj = await _object(r.ref, live, f"resources.{r.name}")
+            if not hasattr(obj, "search"):
+                raise SpecError(
+                    f"resources.{r.name}: {r.ref} is not an Index (it has no search method)"
+                )
+            providers.append(
+                IndexProvider(
+                    r.name,
+                    obj,
+                    k=r.k,
+                    max_chars=r.max_chars,
+                    tenant_key=None if r.shared else r.tenant_key,
+                    title=r.title,
+                    description=r.description,
+                )
+            )
+        else:
+            obj = await _object(r.ref, live, f"resources.{r.name}")
+            if not hasattr(obj, "search"):
+                raise SpecError(
+                    f"resources.{r.name}: {r.ref} is not a memory backend (it has no search method)"
+                )
+            providers.append(
+                MemoryProvider(
+                    r.name,
+                    obj,
+                    k=r.k,
+                    max_chars=r.max_chars,
+                    title=r.title,
+                    description=r.description,
+                )
+            )
+    try:
+        return ResourceSet(providers, max_listed=lim.max_resources_listed)
+    except ValueError as e:
+        raise SpecError(f"resources: {e}; give each a distinct name within its type") from None
 
 
 def _annotations(a: AnnotationsSpec | None) -> MCPAnnotations | None:
@@ -152,6 +242,10 @@ async def acompile_spec(
             "narrow tools.include/exclude/tags or raise the limit deliberately"
         )
     registry = ToolRegistry([e.tool for e in final])
+    resources = await _resources(spec, live)
+    prompts = {p.name: PromptDef(p) for p in spec.prompts}
+    if len(prompts) != len(spec.prompts):
+        raise SpecError("prompts: two prompts share a name")
     core = CompiledServer(
         registry,
         name=spec.server.name,
@@ -166,12 +260,21 @@ async def acompile_spec(
         max_result_chars=spec.limits.max_result_chars,
         tool_meta=meta,
         structured_output=spec.limits.structured_output,
+        resources=resources,
+        prompts=prompts,
     )
     core.spec = spec
     core.owns_engine = owns_engine
     offered = {t.name for t in core.list_tools()}
     core.hidden = [e.tool.name for e in final if e.tool.name not in offered]
     core.report = [f"{len(offered)} tool(s) exposed from {len(spec.sources)} source(s)"]
+    if resources:
+        core.report.append(
+            f"{len(resources.providers)} resource provider(s): "
+            + ", ".join(f"{k}/{n}" for k, n in resources.providers)
+        )
+    if prompts:
+        core.report.append(f"{len(prompts)} prompt(s): {', '.join(prompts)}")
     if core.hidden:
         core.report.append(
             f"{len(core.hidden)} tool(s) hidden because they require approval "
@@ -201,6 +304,11 @@ def describe(core: CompiledServer) -> dict[str, Any]:
         "server": wire.server_info(core)
         | ({"instructions": core.instructions} if core.instructions else {}),
         "tools": wire.tools_list_result(core)["tools"],
+        "resources": wire.resources_list_result(core.list_resources())["resources"],
+        "resource_templates": wire.resource_templates_list_result(core.list_resource_templates())[
+            "resourceTemplates"
+        ],
+        "prompts": wire.prompts_list_result(core.list_prompts())["prompts"],
         "hidden": core.hidden,
         "report": core.report,
     }

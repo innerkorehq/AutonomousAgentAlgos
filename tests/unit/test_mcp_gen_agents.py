@@ -14,8 +14,8 @@ from aaa.mcp import MCPServerBuilder
 from aaa.mcp.compile import acompile_spec
 from aaa.mcp.config import SpecError, dump_spec, load_spec
 from aaa.mcp.sources import agents as agents_mod
-from aaa.mcp.sources.agents import render, template_fields
 from aaa.mcp.spec import MCPSpec
+from aaa.mcp.templating import render, template_fields
 from aaa.runtime import Engine
 from aaa.tools import ToolRegistry, tool
 from helpers.aaa_mcp_server import rich_registry

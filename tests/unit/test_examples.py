@@ -128,6 +128,12 @@ EXPECTED = {
         "red team: attack success 90%, false positives 0%",
         "conversation: 2 turns; contains help = True",
     ],
+    "mcp_resources.py": [
+        "acme sees: ['aaa://files/handbook/handbook.md']",
+        "acme reading globex's file: resource not found",
+        "globex searches the faq: ['r2']",
+        "prompt: Summarize the handbook for a new hire in 50 words.",
+    ],
     "mcp_builder.py": [
         "tool: ask_support | None | {'openWorldHint': True}",
         "tool: lookup_order | Look up an order | {'readOnlyHint': True}",

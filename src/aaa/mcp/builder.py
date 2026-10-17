@@ -210,6 +210,119 @@ class MCPServerBuilder:
         self._data.setdefault("agents", []).append(entry)
         return self
 
+    # -- resources and prompts --------------------------------------------------------------
+    def _add(self, section: str, entry: dict[str, Any]) -> Self:
+        self._data.setdefault(section, []).append({k: v for k, v in entry.items() if v is not None})
+        return self
+
+    def static_resource(
+        self,
+        name: str,
+        text: str,
+        *,
+        mime_type: str = "text/plain",
+        title: str | None = None,
+        description: str | None = None,
+    ) -> Self:
+        return self._add(
+            "resources",
+            {
+                "type": "static",
+                "name": name,
+                "text": text,
+                "mime_type": mime_type,
+                "title": title,
+                "description": description,
+            },
+        )
+
+    def files(
+        self,
+        name: str,
+        root: str | os.PathLike[str],
+        *,
+        pattern: str = "**/*",
+        shared: bool = False,
+        allow_hidden: bool = False,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> Self:
+        """Files under `root` as resources, one subdirectory per tenant unless `shared=True`."""
+        return self._add(
+            "resources",
+            {
+                "type": "files",
+                "name": name,
+                "root": str(root),
+                "pattern": pattern,
+                "shared": shared,
+                "allow_hidden": allow_hidden,
+                "title": title,
+                "description": description,
+            },
+        )
+
+    def index(
+        self,
+        name: str,
+        index: Any,
+        *,
+        tenant_key: str | None = None,
+        shared: bool = False,
+        k: int = 5,
+        max_chars: int = 800,
+    ) -> Self:
+        """Search over an `Index` (an object, or a `module:attribute` reference). Say how documents are tenant-scoped (`tenant_key`) or `shared=True`."""
+        ref = index if isinstance(index, str) else f"index_{name}"
+        if not isinstance(index, str):
+            self._live[ref] = index
+        return self._add(
+            "resources",
+            {
+                "type": "index",
+                "name": name,
+                "ref": ref,
+                "tenant_key": tenant_key,
+                "shared": shared,
+                "k": k,
+                "max_chars": max_chars,
+            },
+        )
+
+    def memory(self, name: str, memory: Any, *, k: int = 5, max_chars: int = 800) -> Self:
+        ref = memory if isinstance(memory, str) else f"memory_{name}"
+        if not isinstance(memory, str):
+            self._live[ref] = memory
+        return self._add(
+            "resources",
+            {"type": "memory", "name": name, "ref": ref, "k": k, "max_chars": max_chars},
+        )
+
+    def prompt(
+        self,
+        name: str,
+        messages: list[str | tuple[str, str]],
+        *,
+        arguments: list[dict[str, Any]] | None = None,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> Self:
+        """A prompt template. Messages are texts (user role) or `(role, text)` pairs; `{argument}` placeholders must be declared in `arguments`."""
+        msgs = [
+            {"role": "user", "text": m} if isinstance(m, str) else {"role": m[0], "text": m[1]}
+            for m in messages
+        ]
+        return self._add(
+            "prompts",
+            {
+                "name": name,
+                "title": title,
+                "description": description,
+                "arguments": arguments or [],
+                "messages": msgs,
+            },
+        )
+
     # -- runtime ---------------------------------------------------------------------------
     def engine(self, engine: Engine | str) -> Self:
         """The engine agent tools run on: an object, or a `module:attribute` reference the server builds itself."""

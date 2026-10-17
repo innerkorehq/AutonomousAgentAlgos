@@ -31,7 +31,19 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
-from aaa.mcp.model import MCPAnnotations, MCPCallResult, MCPToolDef, MCPToolMeta
+from aaa.mcp.model import (
+    MCPAnnotations,
+    MCPCallResult,
+    MCPPrompt,
+    MCPPromptResult,
+    MCPResource,
+    MCPResourceContents,
+    MCPResourceTemplate,
+    MCPToolDef,
+    MCPToolMeta,
+)
+from aaa.mcp.sources.prompts import PromptDef, PromptError
+from aaa.mcp.sources.resources import ResourceNotFound, ResourceSet
 from aaa.runtime.budget import Budget
 from aaa.tools.tool import Tool, ToolArgsError, ToolContext, ToolError, ToolRegistry
 
@@ -64,6 +76,8 @@ class MCPToolServer:
         instructions: str | None = None,
         tool_meta: Mapping[str, MCPToolMeta] | None = None,
         structured_output: bool = False,
+        resources: ResourceSet | None = None,
+        prompts: Mapping[str, PromptDef] | None = None,
     ) -> None:
         if algorithms and engine is None:
             raise ValueError("algorithms= needs engine=")
@@ -78,9 +92,44 @@ class MCPToolServer:
         self.structured_output = (
             structured_output  # send structuredContent for tools with an output schema
         )
+        self.resources = resources
+        self.prompts = dict(prompts or {})
         self.agent_budget = agent_budget or Budget(
             max_steps=50, max_tokens=200_000, deadline_s=120.0
         )
+
+    # -- resources and prompts -------------------------------------------------------------
+    @property
+    def has_resources(self) -> bool:
+        return bool(self.resources)
+
+    @property
+    def has_prompts(self) -> bool:
+        return bool(self.prompts)
+
+    def list_resources(self, tenant: str | None = None) -> list[MCPResource]:
+        return self.resources.list(tenant or self.tenant) if self.resources else []
+
+    def list_resource_templates(self) -> list[MCPResourceTemplate]:
+        return self.resources.templates() if self.resources else []
+
+    async def read_resource(
+        self, uri: str, *, tenant: str | None = None, user: str | None = None
+    ) -> MCPResourceContents:
+        """Read one resource as the host's tenant/user. Raises `ResourceNotFound` for anything that cannot be served."""
+        if not self.resources:
+            raise ResourceNotFound
+        return await self.resources.read(uri, tenant or self.tenant, user or self.user)
+
+    def list_prompts(self) -> list[MCPPrompt]:
+        return [p.describe() for p in self.prompts.values()]
+
+    def get_prompt(self, name: str, arguments: Mapping[str, Any] | None = None) -> MCPPromptResult:
+        """Fill a prompt. Raises `PromptError` for an unknown prompt or arguments that do not fit."""
+        p = self.prompts.get(name)
+        if p is None:
+            raise PromptError(f"unknown prompt {name!r}")
+        return p.get(arguments)
 
     # -- what is offered -------------------------------------------------------------------
     def _exposed(self, t: Tool) -> bool:
@@ -279,6 +328,47 @@ def build_server(core: MCPToolServer) -> Any:
             r = await core.call(params.name, params.arguments)
             return types.CallToolResult.model_validate(wire.call_result_to_wire(r))
 
+        extra: dict[str, Any] = {}
+        if core.has_resources:
+
+            async def on_list_resources(ctx: Any, params: Any) -> Any:
+                return types.ListResourcesResult.model_validate(
+                    wire.resources_list_result(core.list_resources())
+                )
+
+            async def on_list_templates(ctx: Any, params: Any) -> Any:
+                return types.ListResourceTemplatesResult.model_validate(
+                    wire.resource_templates_list_result(core.list_resource_templates())
+                )
+
+            async def on_read(ctx: Any, params: Any) -> Any:
+                try:
+                    c = await core.read_resource(str(params.uri))
+                except ResourceNotFound:
+                    raise _protocol_error(-32002, "resource not found") from None
+                return types.ReadResourceResult.model_validate(wire.resource_read_result(c))
+
+            extra |= {
+                "on_list_resources": on_list_resources,
+                "on_list_resource_templates": on_list_templates,
+                "on_read_resource": on_read,
+            }
+        if core.has_prompts:
+
+            async def on_list_prompts(ctx: Any, params: Any) -> Any:
+                return types.ListPromptsResult.model_validate(
+                    wire.prompts_list_result(core.list_prompts())
+                )
+
+            async def on_get_prompt(ctx: Any, params: Any) -> Any:
+                try:
+                    r = core.get_prompt(params.name, params.arguments)
+                except PromptError as e:
+                    raise _protocol_error(-32602, str(e)) from None
+                return types.GetPromptResult.model_validate(wire.prompt_get_result(r))
+
+            extra |= {"on_list_prompts": on_list_prompts, "on_get_prompt": on_get_prompt}
+
         return Server(
             core.name,
             version=core.version,
@@ -286,6 +376,7 @@ def build_server(core: MCPToolServer) -> Any:
             instructions=core.instructions,
             on_list_tools=on_list,
             on_call_tool=on_call,
+            **extra,
         )
     from mcp import types  # mcp 1.x
     from mcp.server.lowlevel import Server
@@ -306,7 +397,59 @@ def build_server(core: MCPToolServer) -> Any:
         content = [types.TextContent(type="text", text=r.text)]
         return (content, r.structured) if r.structured is not None else content
 
+    if core.has_resources:
+
+        @server.list_resources()
+        async def _list_resources() -> list[Any]:
+            return [
+                types.Resource.model_validate(r)
+                for r in wire.resources_list_result(core.list_resources())["resources"]
+            ]
+
+        @server.list_resource_templates()
+        async def _list_templates() -> list[Any]:
+            return [
+                types.ResourceTemplate.model_validate(t)
+                for t in wire.resource_templates_list_result(core.list_resource_templates())[
+                    "resourceTemplates"
+                ]
+            ]
+
+        @server.read_resource()
+        async def _read(uri: Any) -> Any:
+            from mcp.server.lowlevel.helper_types import ReadResourceContents
+
+            try:
+                c = await core.read_resource(str(uri))
+            except ResourceNotFound:
+                raise ValueError("resource not found") from None
+            return [ReadResourceContents(content=c.text, mime_type=c.mime_type)]
+
+    if core.has_prompts:
+
+        @server.list_prompts()
+        async def _list_prompts() -> list[Any]:
+            return [
+                types.Prompt.model_validate(p)
+                for p in wire.prompts_list_result(core.list_prompts())["prompts"]
+            ]
+
+        @server.get_prompt()
+        async def _get_prompt(name: str, arguments: dict[str, str] | None) -> Any:
+            try:
+                r = core.get_prompt(name, arguments)
+            except PromptError as e:
+                raise ValueError(str(e)) from None
+            return types.GetPromptResult.model_validate(wire.prompt_get_result(r))
+
     return server
+
+
+def _protocol_error(code: int, message: str) -> Exception:
+    """An exception the 2.x SDK turns into a JSON-RPC error with this code."""
+    from mcp.shared.exceptions import MCPError
+
+    return MCPError(code, message)
 
 
 async def serve_stdio(core: MCPToolServer) -> None:

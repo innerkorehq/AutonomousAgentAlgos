@@ -49,4 +49,62 @@ class MCPCallResult:
     )
 
 
-__all__ = ["MCPAnnotations", "MCPCallResult", "MCPToolDef", "MCPToolMeta"]
+@dataclass(frozen=True)
+class MCPResource:
+    uri: str
+    name: str
+    title: str | None = None
+    description: str | None = None
+    mime_type: str | None = None
+    size: int | None = None
+
+
+@dataclass(frozen=True)
+class MCPResourceTemplate:
+    uri_template: str
+    name: str
+    title: str | None = None
+    description: str | None = None
+    mime_type: str | None = None
+
+
+@dataclass(frozen=True)
+class MCPResourceContents:
+    uri: str
+    text: str
+    mime_type: str = "text/plain"
+
+
+@dataclass(frozen=True)
+class MCPPromptArgument:
+    name: str
+    description: str | None = None
+    required: bool = True
+
+
+@dataclass(frozen=True)
+class MCPPrompt:
+    name: str
+    description: str | None = None
+    title: str | None = None
+    arguments: tuple[MCPPromptArgument, ...] = ()
+
+
+@dataclass(frozen=True)
+class MCPPromptResult:
+    description: str | None
+    messages: tuple[tuple[str, str], ...]  # (role, text)
+
+
+__all__ = [
+    "MCPAnnotations",
+    "MCPCallResult",
+    "MCPPrompt",
+    "MCPPromptArgument",
+    "MCPPromptResult",
+    "MCPResource",
+    "MCPResourceContents",
+    "MCPResourceTemplate",
+    "MCPToolDef",
+    "MCPToolMeta",
+]

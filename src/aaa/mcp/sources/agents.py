@@ -9,64 +9,19 @@ Safety, because a remote client now triggers model spend:
 from __future__ import annotations
 
 import asyncio
-import string
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from aaa.eval.result import default_extract
 from aaa.mcp.config import SpecError
 from aaa.mcp.spec import AgentToolSpec
+from aaa.mcp.templating import render, template_fields
 from aaa.runtime.budget import Budget
 from aaa.tools.tool import SchemaTool, ToolArgsError, ToolContext, ToolError, validate_arguments
 
 if TYPE_CHECKING:
     from aaa.runtime.engine import Algorithm, Engine
 
-_FIELD = string.Formatter()
-_PLAIN = __import__("re").compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 BUSY_WAIT_S = 5.0
-
-
-def template_fields(node: Any) -> set[str]:
-    """Every placeholder in a template, validated to be a plain argument name."""
-    found: set[str] = set()
-    if isinstance(node, str):
-        for _, field, spec, conv in _FIELD.parse(node):
-            if field is None:
-                continue
-            if not _PLAIN.match(field) or spec or conv:
-                raise SpecError(
-                    f"input_template: {{{field}}} is not allowed; placeholders are plain argument names like {{input}} "
-                    "(no attributes, indexes, conversions or format specs)"
-                )
-            found.add(field)
-    elif isinstance(node, Mapping):
-        for v in node.values():
-            found |= template_fields(v)
-    elif isinstance(node, list):
-        for v in node:
-            found |= template_fields(v)
-    return found
-
-
-def render(node: Any, args: Mapping[str, Any]) -> Any:
-    """Fill a template. A string that is exactly one placeholder becomes the argument itself (keeping its type)."""
-    if isinstance(node, str):
-        parsed = list(_FIELD.parse(node))
-        if len(parsed) == 1 and parsed[0][0] == "" and parsed[0][1] is not None:
-            return args.get(parsed[0][1])
-        out = []
-        for lit, field, _, _ in parsed:
-            out.append(lit)
-            if field is not None:
-                v = args.get(field, "")
-                out.append(v if isinstance(v, str) else __import__("json").dumps(v, default=str))
-        return "".join(out)
-    if isinstance(node, Mapping):
-        return {k: render(v, args) for k, v in node.items()}
-    if isinstance(node, list):
-        return [render(v, args) for v in node]
-    return node
 
 
 def check_spec(spec: AgentToolSpec) -> None:
@@ -75,7 +30,9 @@ def check_spec(spec: AgentToolSpec) -> None:
         raise SpecError(
             f"agents.{spec.name}.input_schema: must be a JSON schema of type object with properties"
         )
-    unknown = template_fields(spec.input_template) - set(schema.get("properties", {}))
+    unknown = template_fields(
+        spec.input_template, where=f"agents.{spec.name}.input_template"
+    ) - set(schema.get("properties", {}))
     if unknown:
         raise SpecError(
             f"agents.{spec.name}.input_template uses {sorted(unknown)}, which are not properties of its input_schema"

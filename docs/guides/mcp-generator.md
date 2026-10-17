@@ -2,7 +2,7 @@
 
 Instead of writing a server in Python, describe the one you want. `aaa.mcp` compiles a **configuration** (a file, flags, environment variables or the Python API) into a running MCP server: it chooses which tools to expose, how they are named and described, which hints clients get, and whether results are structured. The same description serves over stdio (`aaa mcp serve`) and over HTTP behind [`aaa-server`](../server/index.md).
 
-This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, the Python builder and the command line. Resources, prompts, OpenAPI and Python-module sources and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
+This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, resources and prompts, the Python builder and the command line. OpenAPI and Python-module sources and project scaffolding are planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
 
 ```python
 --8<-- "examples/mcp_generated.py"
@@ -102,6 +102,79 @@ properties = { question = { type = "string" }, customer = { type = "string" } }
 - A failed agent (budget exceeded, cancelled, failed) is an MCP tool error carrying the outcome kind and reason.
 - With `aaa mcp serve`, the engine named in `runtime.engine` is started and stopped with the server. Behind `aaa-server`, pass the server's engine to `acompile_spec(spec, engine=...)` and `runtime` is ignored.
 
+## Resources
+
+Read-only context a client can pull in. Four providers:
+
+| Type | Serves | URI |
+|---|---|---|
+| `static` | inline text | `aaa://static/<name>` |
+| `files` | a directory | `aaa://files/<name>/<path>` |
+| `index` | search over an `Index` | template `aaa://index/<name>/search?q={query}` (JSON hits) |
+| `memory` | search over a memory backend | template `aaa://memory/<name>/search?q={query}` (JSON items) |
+
+```toml
+[[resources]]
+type = "files"
+name = "handbook"
+root = "/srv/handbooks"        # one subdirectory per tenant: a caller sees only root/<tenant>/...
+pattern = "**/*.md"            # `*` crosses directories; a leading **/ also matches top-level files
+# shared = true                # serve root itself to every tenant; must be said explicitly
+
+[[resources]]
+type = "index"
+name = "faq"
+ref = "myapp.search:index"     # module:attribute (or a live key from Python)
+tenant_key = "tenant"          # documents carry meta["tenant"]; or `shared = true` for a public index
+
+[limits]
+max_resource_bytes = 262144    # one read is cut here, with a marker
+max_resources_listed = 500
+```
+
+```python
+--8<-- "examples/mcp_resources.py"
+```
+
+```text
+acme sees: ['aaa://files/handbook/handbook.md']
+globex sees: ['aaa://files/handbook/handbook.md']
+acme reads: Acme handbook
+acme reading globex's file: resource not found
+globex searches the faq: ['r2']
+prompt: Summarize the handbook for a new hire in 50 words.
+```
+
+- **Tenant scoping is the default and must be opted out of.** File roots are per tenant; an index needs `tenant_key` (the document metadata field holding the tenant) or an explicit `shared = true`; memory is scoped by the caller's own tenant and user. The tenant is the host's (stdio configuration, or the authenticated principal behind `aaa-server`), never part of a URI.
+- **One error for everything unreadable.** An unknown name, a malformed URI, a path outside the root (`..`, encoded or not, symlinks, absolute paths), a hidden or key-like file (`.env`, `id_rsa`), another tenant's document, and a provider that failed all answer the same `resource not found`: a client cannot tell forbidden from missing, and a provider's internal error text never leaves.
+- Text only (a binary file is refused), size-capped with an explicit truncation marker, listings capped and scanned within a fixed budget, index/memory queries limited to 500 characters and one `q` parameter.
+- Listing returns concrete resources (static and files); index and memory are *templates*, because their content is a query.
+
+## Prompts
+
+```toml
+[[prompts]]
+name = "triage"
+title = "Triage a ticket"
+description = "Classify a support ticket."
+
+[[prompts.arguments]]
+name = "ticket"
+description = "The ticket text"
+
+[[prompts.arguments]]
+name = "priority"
+type = "enum"                  # string (default), integer, boolean or enum
+choices = ["low", "high"]
+required = false
+
+[[prompts.messages]]
+role = "user"
+text = "Triage this ticket (priority {priority}): {ticket}. Use {{braces}} literally."
+```
+
+Placeholders are plain argument names, checked when the configuration loads (every one must be a declared argument). Arguments are validated when the prompt is fetched: unknown or missing ones, a bad integer, an enum value outside `choices` are errors that say which. What the client sends is only ever *inserted* into the text, never interpreted: a ticket containing `{priority}` or `{ticket.__class__}` arrives literally.
+
 ## The Python builder
 
 The same configuration as typed, chainable Python. Every method edits an `MCPSpec`, so what you build can be written to a file.
@@ -116,7 +189,7 @@ tool: lookup_order | Look up an order | {'readOnlyHint': True}
 answer: Order A1 shipped yesterday.
 ```
 
-`builder.spec()` returns the validated `MCPSpec`; `builder.dump("server.toml")` writes it (JSON, TOML or YAML by extension, defaults left out) unless it holds live Python objects (`add_tools(registry)`, an algorithm object), which a file cannot carry; `await builder.acompile()` / `builder.compile()` build the server. `dump_spec`/`load_spec` round-trip: a spec written and read back is equal.
+The builder also has `static_resource`, `files`, `index`, `memory` and `prompt`. `builder.spec()` returns the validated `MCPSpec`; `builder.dump("server.toml")` writes it (JSON, TOML or YAML by extension, defaults left out) unless it holds live Python objects (`add_tools(registry)`, an algorithm object), which a file cannot carry; `await builder.acompile()` / `builder.compile()` build the server. `dump_spec`/`load_spec` round-trip: a spec written and read back is equal.
 
 ## Precedence
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 TOOL_NAME = r"^[A-Za-z0-9_-]{1,64}$"
 
@@ -45,6 +45,10 @@ class LimitsSpec(_M):
     max_concurrent_agents: int = Field(
         default=4, ge=1, le=64
     )  # agent runs in flight across all agent tools
+    max_resource_bytes: int = Field(
+        default=262_144, ge=1_000, le=10_000_000
+    )  # one resource read is cut here
+    max_resources_listed: int = Field(default=500, ge=1, le=10_000)
     structured_output: bool = (
         True  # send structuredContent for tools whose return type is an object type
     )
@@ -136,6 +140,118 @@ class RuntimeSpec(_M):
     engine: str | None = Field(default=None, pattern=r"^[A-Za-z_][\w.]*:[A-Za-z_][\w.]*$")
 
 
+class StaticResource(_M):
+    type: Literal["static"]
+    name: str = Field(pattern=TOOL_NAME)
+    text: str = Field(max_length=200_000)
+    mime_type: str = "text/plain"
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class FilesResource(_M):
+    """Files under `root` as resources. Per-tenant by default: a caller sees only `root/<tenant>/...`; `shared = true` serves `root`
+    itself to every tenant and must be said explicitly. Hidden files and key-like names are never served."""
+
+    type: Literal["files"]
+    name: str = Field(pattern=TOOL_NAME)
+    root: str = Field(min_length=1)
+    pattern: str = "**/*"
+    shared: bool = False
+    allow_hidden: bool = False
+    mime_type: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class IndexResource(_M):
+    """Search over an `Index` (`ref` = `module:attribute`) as `aaa://index/<name>/search?q=...`. Documents are tenant-scoped through
+    their `meta[tenant_key]`; an index holding one tenant's or public data says `shared = true` instead."""
+
+    type: Literal["index"]
+    name: str = Field(pattern=TOOL_NAME)
+    ref: str = Field(min_length=1, max_length=200)  # module:attribute, or the key of a live object
+    k: int = Field(default=5, ge=1, le=20)
+    max_chars: int = Field(default=800, ge=50, le=20_000)
+    tenant_key: str | None = None
+    shared: bool = False
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def _scoped(self) -> IndexResource:
+        if not self.shared and not self.tenant_key:
+            raise ValueError(
+                "set tenant_key (the document meta field holding the tenant) or shared = true"
+            )
+        return self
+
+
+class MemoryResource(_M):
+    """Search over a memory backend (`ref` = `module:attribute`), scoped by the caller's tenant and user."""
+
+    type: Literal["memory"]
+    name: str = Field(pattern=TOOL_NAME)
+    ref: str = Field(min_length=1, max_length=200)  # module:attribute, or the key of a live object
+    k: int = Field(default=5, ge=1, le=20)
+    max_chars: int = Field(default=800, ge=50, le=20_000)
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+ResourceSpec = Annotated[
+    StaticResource | FilesResource | IndexResource | MemoryResource, Field(discriminator="type")
+]
+
+
+class PromptArg(_M):
+    name: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$", max_length=64)
+    description: str | None = Field(default=None, max_length=500)
+    required: bool = True
+    type: Literal["string", "integer", "boolean", "enum"] = "string"
+    choices: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _choices(self) -> PromptArg:
+        if (self.type == "enum") != bool(self.choices):
+            raise ValueError("choices are required for, and only for, type = 'enum'")
+        return self
+
+
+class PromptMessage(_M):
+    role: Literal["user", "assistant"] = "user"
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class PromptSpec(_M):
+    """A prompt template. `{argument}` placeholders in message texts are filled from the (validated) arguments; write a literal brace
+    as `{{` or `}}`."""
+
+    name: str = Field(pattern=TOOL_NAME)
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    arguments: list[PromptArg] = Field(default_factory=list)
+    messages: list[PromptMessage] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _placeholders(self) -> PromptSpec:
+        from aaa.mcp.config import SpecError
+        from aaa.mcp.templating import template_fields
+
+        names = [a.name for a in self.arguments]
+        if len(set(names)) != len(names):
+            raise ValueError("duplicate argument names")
+        try:
+            used = set().union(
+                *(template_fields(m.text, where=f"prompts.{self.name}") for m in self.messages)
+            )
+        except SpecError as e:
+            raise ValueError(str(e)) from None
+        if missing := sorted(used - set(names)):
+            raise ValueError(f"message placeholders {missing} are not declared as arguments")
+        return self
+
+
 class _Source(_M):
     tags: list[str] = Field(default_factory=list)
     prefix: str = Field(default="", max_length=40, pattern=r"^[A-Za-z0-9_-]*$")
@@ -168,6 +284,8 @@ class MCPSpec(_M):
     sources: list[Source] = Field(default_factory=list)
     tools: ToolsSpec = Field(default_factory=ToolsSpec)
     agents: list[AgentToolSpec] = Field(default_factory=list)
+    resources: list[ResourceSpec] = Field(default_factory=list)
+    prompts: list[PromptSpec] = Field(default_factory=list)
     runtime: RuntimeSpec = Field(default_factory=RuntimeSpec)
 
     def imports_code(self) -> bool:
@@ -176,6 +294,10 @@ class MCPSpec(_M):
             any(s.type == "objects" for s in self.sources)
             or self.runtime.engine is not None
             or any(":" in a.algorithm for a in self.agents)
+            or any(
+                isinstance(r, IndexResource | MemoryResource) and ":" in r.ref
+                for r in self.resources
+            )
         )
 
 
@@ -183,13 +305,21 @@ __all__ = [
     "AgentToolSpec",
     "AnnotationsSpec",
     "BudgetSpec",
+    "FilesResource",
+    "IndexResource",
     "LimitsSpec",
     "LiveSource",
     "MCPSpec",
+    "MemoryResource",
     "ObjectsSource",
+    "PromptArg",
+    "PromptMessage",
+    "PromptSpec",
+    "ResourceSpec",
     "RuntimeSpec",
     "ServerSpec",
     "Source",
+    "StaticResource",
     "TenancySpec",
     "ToolOverride",
     "ToolsSpec",
