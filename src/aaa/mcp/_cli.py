@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,12 @@ from aaa.mcp.config import SpecError, load_spec
 def add_arguments(mc: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("--config", help="a .yaml, .yml, .json or .toml server configuration")
+        p.add_argument(
+            "--overlay",
+            action="append",
+            metavar="FILE",
+            help="a configuration file layered on top of --config (repeatable; also AAA_MCP_OVERLAY)",
+        )
         p.add_argument(
             "--source",
             action="append",
@@ -137,6 +144,14 @@ def add_arguments(mc: argparse._SubParsersAction[argparse.ArgumentParser]) -> No
         "--no-compile", action="store_true", help="only validate the file; do not import anything"
     )
     common(mc.add_parser("inspect", help="print what clients will be shown"))
+    fl = mc.add_parser(
+        "flatten",
+        help="write the configuration with its includes and overlays composed into one file",
+    )
+    common(fl)
+    fl.add_argument(
+        "-o", "--output", help="write here (format from the extension); default: stdout as JSON"
+    )
 
 
 def overlay_of(a: argparse.Namespace) -> dict[str, Any]:
@@ -315,6 +330,32 @@ async def _export(a: argparse.Namespace) -> int:
     return 0
 
 
+def _flatten(spec: Any, output: str | None) -> int:
+    """Write the composed configuration. With -o, file paths are made relative to the output's directory so the file can move with its data."""
+    from aaa.mcp.config import dump_spec
+
+    if output:
+        base = Path(output).resolve().parent
+
+        def rel(v: str | None) -> str | None:
+            if v is None or v.startswith(("http://", "https://")):
+                return v
+            return os.path.relpath(v, base) if Path(v).is_absolute() else v
+
+        for src in spec.sources:
+            if src.type == "openapi":
+                src.document = rel(src.document)
+            elif src.type == "module":
+                src.path = rel(src.path)
+        for res in spec.resources:
+            if res.type == "files":
+                res.root = rel(res.root)
+    text = dump_spec(spec, output)
+    if not output:
+        print(text, end="")
+    return 0
+
+
 async def run(a: argparse.Namespace) -> int:
     from aaa.mcp.compile import acompile_spec, describe
     from aaa.mcp.server import serve_stdio
@@ -328,7 +369,9 @@ async def run(a: argparse.Namespace) -> int:
     if a.sub == "serve" and a.factory and not a.config:
         return await _legacy_serve(a.factory)
     try:
-        spec = load_spec(a.config, overlay=overlay_of(a))
+        spec = load_spec(a.config, overlay=overlay_of(a), overlays=a.overlay or ())
+        if a.sub == "flatten":
+            return _flatten(spec, a.output)
         if a.sub == "check" and a.no_compile:
             print(
                 f"ok: configuration is valid ({len(spec.sources)} source(s); nothing was imported)"

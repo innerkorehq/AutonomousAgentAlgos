@@ -11,7 +11,7 @@ import os
 import re
 import stat
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -140,32 +140,48 @@ def load_spec(
     *,
     environ: Mapping[str, str] | None = None,
     overlay: Mapping[str, Any] | None = None,
+    overlays: Sequence[str | os.PathLike[str]] = (),
 ) -> MCPSpec:
-    """Build the spec: the file or mapping (lowest), then `AAA_MCP__*` environment variables, then `overlay` (command-line flags)."""
+    """Build the spec: the file (with its `include`s) or mapping (lowest), then overlay files (`overlays=` and `AAA_MCP_OVERLAY`),
+    then `AAA_MCP__*` environment variables, then `overlay` (command-line flags)."""
+    from aaa.mcp.include import compose, merge, overlays_from_env
+
+    env = os.environ if environ is None else environ
     where = ""
+    files: list[Path] = []
+    files_overlays = [*overlays_from_env(env), *overlays]
     if source is None:
         data: dict[str, Any] = {}
     elif isinstance(source, Mapping):
         data = dict(source)
+        if "include" in data:
+            raise SpecError("include needs a configuration file to be relative to")
     else:
         path = Path(source)
         where = str(path)
-        data = _read(path)
-        _anchor(data, path.resolve().parent)
-    data = deep_merge(data, env_overlay(os.environ if environ is None else environ))
+        c = compose(path, files_overlays)
+        data, files = c.data, c.files
+        files_overlays = []
+    if files_overlays:  # a mapping or no file at all: overlays still apply
+        base: dict[str, Any] = data
+        for o in files_overlays:
+            c = compose(o)
+            base, files = merge(base, c.data), [*files, *c.files]
+        data = base
+    data = deep_merge(data, env_overlay(env))
     if overlay:
         data = deep_merge(data, overlay)
     try:
         spec = MCPSpec.model_validate(data)
     except ValidationError as e:
         raise SpecError(format_errors(e, where)) from None
-    if where and (spec.imports_code() or spec.launches_processes()):
-        mode = Path(where).stat().st_mode
-        if mode & stat.S_IWOTH:
-            raise SpecError(
-                f"{where}: this configuration imports code or launches processes and is writable by everyone; "
-                f"restrict it (chmod o-w) or the server would run whatever someone else puts in it"
-            )
+    if spec.imports_code() or spec.launches_processes():
+        for f in files:
+            if f.stat().st_mode & stat.S_IWOTH:
+                raise SpecError(
+                    f"{f}: this configuration imports code or launches processes and {'this file is' if str(f) != where else 'it is'} "
+                    f"writable by everyone; restrict it (chmod o-w) or the server would run whatever someone else puts in it"
+                )
     return spec
 
 

@@ -355,9 +355,27 @@ tenants = ["acme"]
 * Rate-limit and concurrency refusals are tool errors with a fixed message (`... retry shortly`) that does not say how the limits are set. Rate limits are in memory, per process; use the server's admission control for a cluster-wide limit.
 * A `match` that selects no tool is an error, so a typo cannot silently leave a tool unlimited. `aaa mcp inspect` lists the rules.
 
+## Split files and per-environment overlays
+
+A large configuration can be split with `include`, and a base configuration can be adapted per environment with overlays.
+
+```toml
+# server.toml
+include = ["tools/orders.toml", "tools/search.toml"]
+[server]
+name = "everything"
+```
+
+* Each included path is relative to the file that names it and must stay inside the top file's directory (symlinks are resolved first; absolute paths and `..` escapes are refused). Nesting is limited to 5 levels, a cycle is an error naming the files, and a file is limited to 1 MB.
+* Paths inside a file (`document`, module `path`, files `root`) are relative to that file, wherever it is included from.
+* Merging: `sources`, `agents`, `resources`, `prompts` and `tools.policies` are **concatenated** in order (included files first, then the including file); dictionaries merge key by key; scalars and every other list are replaced by the later file.
+* Overlays are extra files layered on top: `--overlay prod.toml` (repeatable) or `AAA_MCP_OVERLAY` (paths separated by `:`). They are chosen by the operator, so they may live anywhere, and use the same merge rules.
+* `aaa mcp flatten --config server.toml --overlay prod.toml -o flat.toml` writes the composed result as one file (paths made relative to the output) for review or shipping. Without `-o` it prints JSON.
+* If the composed configuration imports code or launches processes, **every** contributing file must not be world-writable.
+
 ## Precedence
 
-Lowest to highest: the file, then `AAA_MCP__*` environment variables, then command-line flags. Levels are separated by double underscores (`AAA_MCP__SERVER__NAME=desk`, `AAA_MCP__TOOLS__EXCLUDE='["a","b"]'`: lists, numbers and booleans are JSON). Dictionaries merge key by key; lists and scalars are **replaced**, so `--exclude x` means exactly `x`.
+Lowest to highest: the file with its includes, then overlay files, then `AAA_MCP__*` environment variables, then command-line flags. Levels are separated by double underscores (`AAA_MCP__SERVER__NAME=desk`, `AAA_MCP__TOOLS__EXCLUDE='["a","b"]'`: lists, numbers and booleans are JSON). Dictionaries merge key by key; lists and scalars are **replaced**, so `--exclude x` means exactly `x`.
 
 Secrets never go in the file: a field that needs one takes an `env:NAME` or `${NAME}` reference (`Secret.parse`), and the value is read when needed and never shown in a `repr`.
 
