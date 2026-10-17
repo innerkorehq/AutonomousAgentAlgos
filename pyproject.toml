@@ -1,6 +1,6 @@
 [project]
 name = "autonomous-agent-architecture"
-version = "0.3.1"
+version = "0.4.0.dev0"
 description = "AAA, Autonomous Agent Architecture: the architecture and runtime for autonomous agents. Build, orchestrate, execute, recover, manage."
 readme = "README.md"
 license = "MIT"
@@ -90,7 +90,7 @@ anyio_mode = "auto"
 line-length = 100
 src = ["src", "tests"]
 # Recent ruff also formats Python blocks inside Markdown, which mangles the docs' `--8<--` embed markers.
-extend-exclude = ["*.md", "docs", "site"]
+extend-exclude = ["*.md", "docs", "site", "tests/golden"]  # golden files are exact expected output, not source to reformat
 
 [tool.pyright]
 # Gate the library, the documented examples and the scripts. Tests are not type-checked: they use

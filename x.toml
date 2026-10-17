@@ -1,0 +1,9 @@
+version = 1
+
+[server]
+name = "p"
+
+[[sources]]
+type = "openapi"
+document = "openapi/api.json"
+allowed_hosts = ["api.example.com"]

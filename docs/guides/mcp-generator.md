@@ -2,7 +2,7 @@
 
 Instead of writing a server in Python, describe the one you want. `aaa.mcp` compiles a **configuration** (a file, flags, environment variables or the Python API) into a running MCP server: it chooses which tools to expose, how they are named and described, which hints clients get, and whether results are structured. The same description serves over stdio (`aaa mcp serve`) and over HTTP behind [`aaa-server`](../server/index.md).
 
-This page covers what exists today: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules and OpenAPI documents as tools, resources and prompts, the Python builder and the command line. Project scaffolding is planned and not yet implemented; the [threat model](../security/mcp-generator.md) is already written for them.
+This page covers: AAA objects as the source, tool selection and metadata, structured output, algorithms exposed as tools, Python modules and OpenAPI documents as tools, resources and prompts, the Python builder and the command line. The [threat model](../security/mcp-generator.md) covers every source.
 
 ```python
 --8<-- "examples/mcp_generated.py"
@@ -258,6 +258,46 @@ answer: Order A1 shipped yesterday.
 ```
 
 The builder also has `static_resource`, `files`, `index`, `memory` and `prompt`. `builder.spec()` returns the validated `MCPSpec`; `builder.dump("server.toml")` writes it (JSON, TOML or YAML by extension, defaults left out) unless it holds live Python objects (`add_tools(registry)`, an algorithm object), which a file cannot carry; `await builder.acompile()` / `builder.compile()` build the server. `dump_spec`/`load_spec` round-trip: a spec written and read back is equal.
+
+## Generating a project
+
+`aaa mcp init` writes a project around a configuration, so a generated server is something you can version, test and deploy. It is **packaging, not logic**: `server.py` is a fixed file that loads the configuration and compiles it, so what the project does is decided by the configuration alone.
+
+```bash
+aaa mcp init my-server                                # interactive: asks for the sources, transport, Dockerfile, format
+aaa mcp init my-server --yes --source openapi=api.json --allowed-host api.example.com --bearer-env ORDERS_API_TOKEN --transport http
+aaa mcp init my-server --yes --source module=myapp.tools:word_count,reverse --source objects=myapp.tools:registry
+aaa mcp export my-server --config server.toml         # a project around a configuration you already have (copied as written)
+aaa mcp export my-server --check                      # have generated files drifted from their templates? (exit 1 if so)
+aaa mcp export my-server --update                     # regenerate the generated files you have not edited
+```
+
+| File | What it is |
+|---|---|
+| `server.toml` (or `.json`/`.yaml`) | The configuration. **Yours**: edit it; `--update` never touches it. |
+| `server.py` | Stdio: loads the configuration and serves. HTTP: `async def build() -> ServerConfig` for `aaa-server serve server:build`, with API-key authentication from `MCP_API_KEYS` (the key decides tenant and user). |
+| `requirements.txt` | The library (and `aaa-server` for HTTP) pinned to the compatible range. |
+| `Dockerfile`, `.dockerignore` | A slim non-root image; stdio runs with `docker run -i`, HTTP listens on 8000 behind your reverse proxy. `--no-docker` skips them. |
+| `.env.example` | The **names** of the environment variables the configuration refers to (and `MCP_API_KEYS`), never values. |
+| `tests/test_server.py` | A smoke test: the configuration is valid and compiles. |
+| `README.md`, `.gitignore`, `.aaa-scaffold.json` | How to run it; ignores `.env`; the options and a hash of each generated file (what `--check`/`--update` compare). |
+
+```python
+--8<-- "examples/mcp_init.py"
+```
+
+```text
+project files: .dockerignore, .env.example, .gitignore, Dockerfile, README.md, requirements.txt, server.py, server.toml, tests/test_server.py
+secret names (never values): ['ORDERS_API_TOKEN']
+drift right after generating: none
+after editing the Dockerfile: ['Dockerfile: differs from its template (and was edited by hand)']
+recorded: aaa with 8 hashed files
+```
+
+- **No user text reaches Python source.** The generated `.py` files are identical whatever the configuration says; the configuration travels only in the data file, written from the validated model. Project names are restricted to `[a-z][a-z0-9_-]*`, and a generated path can never leave the project directory.
+- **No secret value is written anywhere**, only `env:NAME` references and the names in `.env.example`. A test plants a canary secret and searches the whole generated tree for it.
+- **Relative paths in a configuration are relative to the configuration file** (the OpenAPI `document`, a module `path`, a files-resource `root`), so a project works from any directory. `--vendor-spec` copies OpenAPI documents into `openapi/` (an https document is fetched through the same safe fetcher) for reproducible builds.
+- `init` refuses to write into a non-empty directory without `--force`. With HTTP, put a TLS-terminating reverse proxy in front (see [deployment](../operations/deployment.md)); if the configuration has `agents`, wire your model and handlers onto the engine first.
 
 ## Precedence
 

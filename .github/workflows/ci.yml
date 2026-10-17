@@ -376,6 +376,38 @@ jobs:
         run: docker compose logs
       - run: docker compose down -v
 
+  mcp-scaffold:
+    # A generated project builds as a container and serves authenticated MCP over HTTP.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra mcp
+      - name: Generate a project and build its image against this checkout
+        run: |
+          mkdir -p /tmp/proj && cd /tmp/proj
+          printf '[server]\nname = "ci"\n\n[[sources]]\ntype = "module"\nmodule = "ci_tools"\npath = "."\nallow = ["shout"]\nno_approval = ["shout"]\n' > cfg.toml
+          uv run --project "$GITHUB_WORKSPACE" aaa mcp export /tmp/proj/app --config cfg.toml --name ci --transport http
+          printf '__all__ = ["shout"]\n\ndef shout(text: str) -> str:\n    """Upper-case text."""\n    return text.upper()\n' > app/ci_tools.py
+          # install the library and server from this checkout instead of PyPI: build wheels and point requirements at them
+          uv build --project "$GITHUB_WORKSPACE" --all-packages --wheel --out-dir app/wheels
+          LIB=$(uv run --project "$GITHUB_WORKSPACE" python -c "import aaa; print(aaa.__version__)")
+          SRV=$(uv run --project "$GITHUB_WORKSPACE" python -c "from importlib.metadata import version; print(version('aaa-server'))")
+          printf -- "--find-links wheels\nautonomous-agent-architecture[mcp]==$LIB\naaa-server==$SRV\n" > app/requirements.txt
+          sed -i 's|^COPY requirements.txt .|COPY wheels wheels\nCOPY requirements.txt .|' app/Dockerfile   # the wheels must exist before pip runs
+          docker build -t generated-mcp app
+      - name: It serves, and refuses callers without a key
+        run: |
+          docker run -d --name gen -p 8000:8000 -e MCP_API_KEYS='{"ci-key":["acme","ci"]}' generated-mcp
+          for i in $(seq 1 30); do curl -sf localhost:8000/healthz && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/mcp -d '{}')" = 401
+          curl -sf -X POST localhost:8000/mcp -H 'Authorization: Bearer ci-key' -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"shout","arguments":{"text":"ok"}}}' | grep -q '"text": *"OK"'
+      - if: failure()
+        run: docker logs gen || true
+
   adapters:
     # The memory adapters are tested against stand-ins; this job replays their calls against the REAL
     # Mem0, Graphiti and LangGraph signatures (tests/unit/test_memory_signatures.py), which are skipped
@@ -390,7 +422,7 @@ jobs:
       - name: Locked versions
         run: |
           uv sync --frozen --extra mem0 --extra graphiti --extra langgraph --extra langmem --extra mcp --extra mcp-config --extra otel
-          uv run pytest -v -p no:cacheprovider tests/unit/test_otel.py tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/unit/test_mcp_gen.py tests/unit/test_mcp_gen_agents.py tests/unit/test_mcp_gen_resources.py tests/unit/test_mcp_gen_modules.py tests/unit/test_mcp_gen_openapi.py tests/server/test_mcp_http.py tests/unit/test_examples.py -k "not cluster"
+          uv run pytest -v -p no:cacheprovider tests/unit/test_otel.py tests/unit/test_memory_signatures.py tests/unit/test_memory_adapters.py tests/unit/test_memory_contract.py tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/unit/test_mcp_gen.py tests/unit/test_mcp_gen_agents.py tests/unit/test_mcp_gen_resources.py tests/unit/test_mcp_gen_modules.py tests/unit/test_mcp_gen_openapi.py tests/unit/test_mcp_scaffold.py tests/server/test_mcp_http.py tests/unit/test_examples.py -k "not cluster"
       - name: OpenAI SDK types (conformance of the Responses client; not a runtime dependency)
         run: |
           uv pip install openai
@@ -399,7 +431,7 @@ jobs:
         run: |
           for spec in "mcp<2" "mcp==1.21.2"; do
             uv pip install "$spec"
-            uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/unit/test_mcp_gen.py tests/unit/test_mcp_gen_agents.py tests/unit/test_mcp_gen_resources.py tests/unit/test_mcp_gen_modules.py tests/unit/test_mcp_gen_openapi.py
+            uv run --no-sync pytest -v -p no:cacheprovider tests/unit/test_mcp.py tests/unit/test_mcp_server.py tests/unit/test_mcp_gen.py tests/unit/test_mcp_gen_agents.py tests/unit/test_mcp_gen_resources.py tests/unit/test_mcp_gen_modules.py tests/unit/test_mcp_gen_openapi.py tests/unit/test_mcp_scaffold.py
           done
       - name: Newest releases (scheduled and manual runs only)
         if: github.event_name != 'pull_request' && github.event_name != 'push'

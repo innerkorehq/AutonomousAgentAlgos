@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "server": {
+    "name": "proj"
+  },
+  "sources": [
+    {
+      "type": "module",
+      "module": "json",
+      "allow": [
+        "dumps"
+      ]
+    }
+  ]
+}

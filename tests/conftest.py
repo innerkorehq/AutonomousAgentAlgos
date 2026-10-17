@@ -18,6 +18,9 @@ import uuid
 
 import pytest
 
+# golden project files include a generated `tests/test_server.py`: data to compare against, not tests to run here
+collect_ignore_glob = ["golden/*"]
+
 
 def _free_port() -> int:
     with socket.socket() as s:

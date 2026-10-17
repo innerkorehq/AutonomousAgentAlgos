@@ -99,6 +99,29 @@ def _read(path: Path) -> dict[str, Any]:
     return data
 
 
+def _anchor(data: dict[str, Any], base: Path) -> None:
+    """Make the file paths a configuration names relative to the configuration file, not to wherever the server was started from."""
+
+    def fix(d: dict[str, Any], key: str) -> None:
+        v = d.get(key)
+        if (
+            isinstance(v, str)
+            and v
+            and not v.startswith(("http://", "https://"))
+            and not Path(v).is_absolute()
+        ):
+            d[key] = str((base / v).resolve())
+
+    for src in data.get("sources", []) if isinstance(data.get("sources"), list) else []:
+        if isinstance(src, dict) and src.get("type") == "openapi":
+            fix(src, "document")
+        if isinstance(src, dict) and src.get("type") == "module":
+            fix(src, "path")
+    for res in data.get("resources", []) if isinstance(data.get("resources"), list) else []:
+        if isinstance(res, dict) and res.get("type") == "files":
+            fix(res, "root")
+
+
 def format_errors(err: ValidationError, where: str = "") -> str:
     lines = []
     for e in err.errors(include_input=False, include_url=False, include_context=False):
@@ -128,6 +151,7 @@ def load_spec(
         path = Path(source)
         where = str(path)
         data = _read(path)
+        _anchor(data, path.resolve().parent)
     data = deep_merge(data, env_overlay(os.environ if environ is None else environ))
     if overlay:
         data = deep_merge(data, overlay)

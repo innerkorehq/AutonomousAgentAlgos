@@ -128,6 +128,11 @@ EXPECTED = {
         "red team: attack success 90%, false positives 0%",
         "conversation: 2 turns; contains help = True",
     ],
+    "mcp_init.py": [
+        "drift right after generating: none",
+        "secret names (never values): ['ORDERS_API_TOKEN']",
+        "after editing the Dockerfile: ['Dockerfile: differs from its template (and was edited by hand)']",
+    ],
     "mcp_openapi.py": [
         "offered: getOrder | Fetch one order | read-only: True",
         "hidden (state-changing, need approval): ['cancelOrder', 'createOrder']",

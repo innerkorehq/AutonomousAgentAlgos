@@ -29,3 +29,13 @@ See [Generating an MCP server](../../guides/mcp-generator.md).
 ::: aaa.mcp.spec.AgentToolSpec
 
 ::: aaa.mcp.spec.BudgetSpec
+
+::: aaa.mcp.scaffold.Options
+
+::: aaa.mcp.scaffold.render
+
+::: aaa.mcp.scaffold.write_project
+
+::: aaa.mcp.scaffold.check_project
+
+::: aaa.mcp.scaffold.update_project
